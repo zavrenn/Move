@@ -67,4 +67,4 @@ Move does not request network access or collect personal data. Movement logs are
 
 ## License
 
-No license has been selected yet. Add a license before publishing if you want to grant others permission to reuse or modify the source.
+Released under the [MIT License](LICENSE).
