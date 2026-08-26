@@ -12,6 +12,8 @@ class DashboardScreen extends StatelessWidget {
     super.key,
     required this.logs,
     required this.steps,
+    required this.goals,
+    required this.quickMovements,
     required this.healthStatus,
     required this.syncingSteps,
     required this.onLog,
@@ -20,10 +22,13 @@ class DashboardScreen extends StatelessWidget {
     required this.onConnectSteps,
     required this.onRefreshSteps,
     required this.onOpenSettings,
+    required this.onCustomizeQuickMoves,
   });
 
   final List<MovementLog> logs;
   final List<DailyStepCount> steps;
+  final DailyGoalSettings goals;
+  final List<MovementDefinition> quickMovements;
   final HealthConnectStatus? healthStatus;
   final bool syncingSteps;
   final ValueChanged<MovementDefinition> onLog;
@@ -32,11 +37,16 @@ class DashboardScreen extends StatelessWidget {
   final Future<void> Function() onConnectSteps;
   final Future<void> Function() onRefreshSteps;
   final VoidCallback onOpenSettings;
+  final VoidCallback onCustomizeQuickMoves;
 
   @override
   Widget build(BuildContext context) {
     final analytics = MoveAnalytics(logs);
     final stepAnalytics = StepAnalytics(steps);
+    final activity = ActivityAnalytics(
+      movements: analytics,
+      steps: stepAnalytics,
+    );
     final recent = logs.take(3).toList();
 
     return SafeArea(
@@ -50,7 +60,7 @@ class DashboardScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _DashboardHeader(
-                streak: analytics.currentStreak,
+                streak: activity.currentStreak,
                 onSettings: onOpenSettings,
               ),
               const SizedBox(height: 18),
@@ -76,6 +86,7 @@ class DashboardScreen extends StatelessWidget {
                     steps.isNotEmpty ||
                     healthStatus == HealthConnectStatus.connected,
                 syncingSteps: syncingSteps,
+                goals: goals,
               ),
               if (healthStatus == HealthConnectStatus.permissionRequired) ...[
                 const SizedBox(height: 10),
@@ -92,9 +103,13 @@ class DashboardScreen extends StatelessWidget {
                 child: WeekBarChart(days: analytics.lastSevenDays),
               ),
               const SizedBox(height: 22),
-              const SectionTitle(
+              SectionTitle(
                 title: 'Quick move',
                 subtitle: 'Your most useful room-friendly movements',
+                action: TextButton(
+                  onPressed: onCustomizeQuickMoves,
+                  child: const Text('Edit'),
+                ),
               ),
               const SizedBox(height: 10),
               LayoutBuilder(
@@ -103,7 +118,7 @@ class DashboardScreen extends StatelessWidget {
                   return Wrap(
                     spacing: 10,
                     runSpacing: 10,
-                    children: MovementCatalog.quickMovements.map((movement) {
+                    children: quickMovements.map((movement) {
                       return SizedBox(
                         width: width,
                         child: _QuickMovementCard(
@@ -234,12 +249,14 @@ class _TodayCard extends StatelessWidget {
     required this.stepAnalytics,
     required this.showCachedSteps,
     required this.syncingSteps,
+    required this.goals,
   });
 
   final MoveAnalytics analytics;
   final StepAnalytics stepAnalytics;
   final bool showCachedSteps;
   final bool syncingSteps;
+  final DailyGoalSettings goals;
 
   @override
   Widget build(BuildContext context) {
@@ -344,11 +361,97 @@ class _TodayCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 15),
+                Container(height: 1, color: MoveColors.border),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _InlineGoalProgress(
+                        icon: Icons.task_alt_rounded,
+                        label: 'MOVEMENT',
+                        current: sets,
+                        goal: goals.movementGoal,
+                        color: MoveColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: _InlineGoalProgress(
+                        icon: Icons.directions_walk_rounded,
+                        label: 'STEPS',
+                        current: showCachedSteps
+                            ? stepAnalytics.todaySteps
+                            : null,
+                        goal: goals.stepGoal,
+                        color: MoveColors.secondary,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _InlineGoalProgress extends StatelessWidget {
+  const _InlineGoalProgress({
+    required this.icon,
+    required this.label,
+    required this.current,
+    required this.goal,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final int? current;
+  final int goal;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = NumberFormat.compact();
+    final progress = ((current ?? 0) / goal).clamp(0.0, 1.0);
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: MoveColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${current == null ? '—' : formatter.format(current)} / '
+              '${formatter.format(goal)}',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: MoveColors.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 4,
+            color: color,
+            backgroundColor: MoveColors.surfaceHigh,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -455,9 +558,9 @@ class _QuickMovementCard extends StatelessWidget {
             movement.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 3),
           Text(

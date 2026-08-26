@@ -74,6 +74,141 @@ class StepAnalytics {
   int get dailyAverage => (lastSevenTotal / 7).round();
 }
 
+class ActivityAnalytics {
+  const ActivityAnalytics({required this.movements, required this.steps});
+
+  final MoveAnalytics movements;
+  final StepAnalytics steps;
+
+  DateTime get today => movements.today;
+
+  int get activeDays => _activeDates.length;
+
+  int get currentStreak {
+    final active = _activeDates;
+    if (active.isEmpty) return 0;
+
+    var cursor = today;
+    if (!active.contains(cursor)) {
+      cursor = _addDays(today, -1);
+      if (!active.contains(cursor)) return 0;
+    }
+
+    var streak = 0;
+    while (active.contains(cursor)) {
+      streak++;
+      cursor = _addDays(cursor, -1);
+    }
+    return streak;
+  }
+
+  int get longestStreak {
+    final days = _activeDates.toList()..sort();
+    if (days.isEmpty) return 0;
+
+    var longest = 1;
+    var running = 1;
+    for (var index = 1; index < days.length; index++) {
+      if (_calendarDistance(days[index - 1], days[index]) == 1) {
+        running++;
+        if (running > longest) longest = running;
+      } else {
+        running = 1;
+      }
+    }
+    return longest;
+  }
+
+  bool isActiveOn(DateTime date) => setsOn(date) > 0 || stepsOn(date) > 0;
+
+  int setsOn(DateTime date) => movements.setsOn(date);
+
+  int stepsOn(DateTime date) => steps.stepsOn(date);
+
+  Set<DateTime> get _activeDates {
+    final dates = movements.logs.map((log) => _day(log.performedAt)).toSet();
+    dates.addAll(
+      steps.values
+          .where((value) => value.steps > 0)
+          .map((value) => _day(value.date)),
+    );
+    return dates;
+  }
+
+  static DateTime _day(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
+  static DateTime _addDays(DateTime date, int days) =>
+      DateTime(date.year, date.month, date.day + days);
+
+  static int _calendarDistance(DateTime from, DateTime to) {
+    final utcFrom = DateTime.utc(from.year, from.month, from.day);
+    final utcTo = DateTime.utc(to.year, to.month, to.day);
+    return utcTo.difference(utcFrom).inDays;
+  }
+}
+
+class WeeklyRecap {
+  const WeeklyRecap({
+    required this.activeDays,
+    required this.previousActiveDays,
+    required this.sets,
+    required this.previousSets,
+    required this.steps,
+    required this.previousSteps,
+    required this.goalDays,
+  });
+
+  final int activeDays;
+  final int previousActiveDays;
+  final int sets;
+  final int previousSets;
+  final int steps;
+  final int previousSteps;
+  final int goalDays;
+
+  int get activeDayDelta => activeDays - previousActiveDays;
+
+  factory WeeklyRecap.calculate({
+    required MoveAnalytics movements,
+    required StepAnalytics steps,
+    required DailyGoalSettings goals,
+  }) {
+    final today = movements.today;
+    final currentDays = List.generate(
+      7,
+      (index) => DateTime(today.year, today.month, today.day + index - 6),
+    );
+    final previousDays = List.generate(
+      7,
+      (index) => DateTime(today.year, today.month, today.day + index - 13),
+    );
+
+    int setTotal(Iterable<DateTime> days) =>
+        days.fold(0, (total, day) => total + movements.setsOn(day));
+    int stepTotal(Iterable<DateTime> days) =>
+        days.fold(0, (total, day) => total + steps.stepsOn(day));
+    int activeDayTotal(Iterable<DateTime> days) => days.where((day) {
+      return movements.setsOn(day) > 0 || steps.stepsOn(day) > 0;
+    }).length;
+
+    return WeeklyRecap(
+      activeDays: activeDayTotal(currentDays),
+      previousActiveDays: activeDayTotal(previousDays),
+      sets: setTotal(currentDays),
+      previousSets: setTotal(previousDays),
+      steps: stepTotal(currentDays),
+      previousSteps: stepTotal(previousDays),
+      goalDays: currentDays.where((day) {
+        return goals.isComplete(
+          steps: steps.stepsOn(day),
+          movements: movements.setsOn(day),
+        );
+      }).length,
+    );
+  }
+}
+
 class MoveAnalytics {
   MoveAnalytics(this.logs, {DateTime? now}) : now = now ?? DateTime.now();
 

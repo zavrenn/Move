@@ -9,18 +9,31 @@ import 'move_theme.dart';
 import 'move_widgets.dart';
 
 class ProgressScreen extends StatelessWidget {
-  const ProgressScreen({super.key, required this.logs, required this.steps});
+  const ProgressScreen({
+    super.key,
+    required this.logs,
+    required this.steps,
+    required this.goals,
+  });
 
   final List<MovementLog> logs;
   final List<DailyStepCount> steps;
+  final DailyGoalSettings goals;
 
   @override
   Widget build(BuildContext context) {
     final analytics = MoveAnalytics(logs);
     final stepAnalytics = StepAnalytics(steps);
+    final activity = ActivityAnalytics(
+      movements: analytics,
+      steps: stepAnalytics,
+    );
     final summaries = analytics.movementSummaries;
-    final thisWeek = analytics.thisWeek;
-    final previousWeek = analytics.previousWeek;
+    final recap = WeeklyRecap.calculate(
+      movements: analytics,
+      steps: stepAnalytics,
+      goals: goals,
+    );
 
     return SafeArea(
       bottom: false,
@@ -36,7 +49,7 @@ class ProgressScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 18),
-            _StreakCard(analytics: analytics),
+            _StreakCard(activity: activity),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -51,7 +64,7 @@ class ProgressScreen extends StatelessWidget {
                 Expanded(
                   child: _CompactStat(
                     label: 'ACTIVE DAYS',
-                    value: '${analytics.activeDays}',
+                    value: '${activity.activeDays}',
                     icon: Icons.calendar_today_rounded,
                   ),
                 ),
@@ -69,36 +82,18 @@ class ProgressScreen extends StatelessWidget {
             ),
             const SizedBox(height: 22),
             const SectionTitle(
-              title: 'Weekly pulse',
-              subtitle: 'Set count across the last seven days',
+              title: 'Weekly recap',
+              subtitle: 'Your last seven days compared with the seven before',
             ),
             const SizedBox(height: 10),
-            SurfaceCard(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      _WeekTotal(label: 'THIS WEEK', value: thisWeek.sets),
-                      const Spacer(),
-                      _WeekChange(
-                        current: thisWeek.sets,
-                        previous: previousWeek.sets,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  WeekBarChart(days: analytics.lastSevenDays),
-                ],
-              ),
-            ),
+            _WeeklyRecapCard(recap: recap, stepsConnected: steps.isNotEmpty),
             const SizedBox(height: 22),
             const SectionTitle(
               title: 'Consistency',
               subtitle: 'Your last 35 days',
             ),
             const SizedBox(height: 10),
-            SurfaceCard(child: _ConsistencyGrid(analytics: analytics)),
+            SurfaceCard(child: _ConsistencyGrid(activity: activity)),
             const SizedBox(height: 22),
             const SectionTitle(
               title: 'Top movements',
@@ -188,9 +183,9 @@ class _StepMetric extends StatelessWidget {
 }
 
 class _StreakCard extends StatelessWidget {
-  const _StreakCard({required this.analytics});
+  const _StreakCard({required this.activity});
 
-  final MoveAnalytics analytics;
+  final ActivityAnalytics activity;
 
   @override
   Widget build(BuildContext context) {
@@ -223,10 +218,10 @@ class _StreakCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${analytics.currentStreak} day${analytics.currentStreak == 1 ? '' : 's'}',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontSize: 26,
-                  ),
+                  '${activity.currentStreak} day${activity.currentStreak == 1 ? '' : 's'}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontSize: 26),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -240,7 +235,7 @@ class _StreakCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${analytics.longestStreak}',
+                '${activity.longestStreak}',
                 style: const TextStyle(
                   color: MoveColors.secondary,
                   fontSize: 20,
@@ -288,44 +283,122 @@ class _CompactStat extends StatelessWidget {
   }
 }
 
-class _WeekTotal extends StatelessWidget {
-  const _WeekTotal({required this.label, required this.value});
+class _WeeklyRecapCard extends StatelessWidget {
+  const _WeeklyRecapCard({required this.recap, required this.stepsConnected});
 
+  final WeeklyRecap recap;
+  final bool stepsConnected;
+
+  @override
+  Widget build(BuildContext context) {
+    final stepValue = stepsConnected
+        ? NumberFormat.compact().format(recap.steps)
+        : '—';
+    return SurfaceCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(
+                'LAST 7 DAYS',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: MoveColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const Spacer(),
+              _ActiveDayTrend(recap: recap),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _RecapMetric(
+                  value: '${recap.activeDays}',
+                  label: 'ACTIVE DAYS',
+                ),
+              ),
+              Container(width: 1, height: 34, color: MoveColors.border),
+              Expanded(
+                child: _RecapMetric(value: '${recap.sets}', label: 'SETS'),
+              ),
+              Container(width: 1, height: 34, color: MoveColors.border),
+              Expanded(
+                child: _RecapMetric(value: stepValue, label: 'STEPS'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Text('Goal days', style: Theme.of(context).textTheme.bodySmall),
+              const Spacer(),
+              Text(
+                stepsConnected ? '${recap.goalDays} / 7' : 'Connect steps',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: MoveColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: stepsConnected ? recap.goalDays / 7 : 0,
+              minHeight: 5,
+              color: MoveColors.primary,
+              backgroundColor: MoveColors.surfaceHigh,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecapMetric extends StatelessWidget {
+  const _RecapMetric({required this.value, required this.label});
+
+  final String value;
   final String label;
-  final int value;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(value, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 2),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
-        const SizedBox(height: 3),
-        Text('$value sets', style: Theme.of(context).textTheme.titleLarge),
       ],
     );
   }
 }
 
-class _WeekChange extends StatelessWidget {
-  const _WeekChange({required this.current, required this.previous});
+class _ActiveDayTrend extends StatelessWidget {
+  const _ActiveDayTrend({required this.recap});
 
-  final int current;
-  final int previous;
+  final WeeklyRecap recap;
 
   @override
   Widget build(BuildContext context) {
-    final isUp = current >= previous;
+    final delta = recap.activeDayDelta;
     final String label;
-    if (previous == 0) {
-      label = current == 0 ? 'No activity yet' : 'Fresh week';
+    if (recap.previousActiveDays == 0) {
+      label = recap.activeDays == 0 ? 'Start today' : 'First stretch';
+    } else if (delta == 0) {
+      label = 'Steady';
     } else {
-      final percent = ((current - previous) / previous * 100).round().abs();
-      label = '${isUp ? '+' : '-'}$percent%';
+      label =
+          '${delta > 0 ? '+' : ''}$delta active day${delta.abs() == 1 ? '' : 's'}';
     }
-    final color = isUp ? MoveColors.primary : MoveColors.textSecondary;
+    final color = delta >= 0 ? MoveColors.primary : MoveColors.textSecondary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(99),
@@ -334,8 +407,8 @@ class _WeekChange extends StatelessWidget {
         label,
         style: TextStyle(
           color: color,
-          fontWeight: FontWeight.w700,
           fontSize: 12,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -343,20 +416,21 @@ class _WeekChange extends StatelessWidget {
 }
 
 class _ConsistencyGrid extends StatelessWidget {
-  const _ConsistencyGrid({required this.analytics});
+  const _ConsistencyGrid({required this.activity});
 
-  final MoveAnalytics analytics;
+  final ActivityAnalytics activity;
 
   @override
   Widget build(BuildContext context) {
     final days = List.generate(
       35,
       (index) => DateTime(
-        analytics.today.year,
-        analytics.today.month,
-        analytics.today.day + index - 34,
+        activity.today.year,
+        activity.today.month,
+        activity.today.day + index - 34,
       ),
     );
+    final numberFormat = NumberFormat.decimalPattern();
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 6.0;
@@ -368,28 +442,35 @@ class _ConsistencyGrid extends StatelessWidget {
               spacing: gap,
               runSpacing: gap,
               children: days.map((day) {
-                final sets = analytics.setsOn(day);
+                final sets = activity.setsOn(day);
+                final steps = activity.stepsOn(day);
+                final active = sets > 0 || steps > 0;
                 final alpha = switch (sets) {
+                  0 when steps > 0 => 0.28,
                   0 => 0.0,
                   1 => 0.28,
                   2 => 0.48,
                   3 => 0.68,
                   _ => 0.92,
                 };
+                final details = [
+                  if (sets > 0) '$sets set${sets == 1 ? '' : 's'}',
+                  if (steps > 0) '${numberFormat.format(steps)} steps',
+                ];
                 return Tooltip(
-                  message: '$sets set${sets == 1 ? '' : 's'}',
+                  message: details.isEmpty
+                      ? 'No activity'
+                      : details.join(' • '),
                   child: Container(
                     width: cell,
                     height: cell,
                     decoration: BoxDecoration(
-                      color: sets == 0
+                      color: !active
                           ? MoveColors.surfaceHigh
                           : MoveColors.primary.withValues(alpha: alpha),
                       borderRadius: BorderRadius.circular(7),
                       border: Border.all(
-                        color: sets == 0
-                            ? MoveColors.border
-                            : Colors.transparent,
+                        color: !active ? MoveColors.border : Colors.transparent,
                       ),
                     ),
                   ),

@@ -20,6 +20,7 @@ object ReminderScheduler {
     private const val PREFS = "move_reminders"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_NEXT_AT = "next_at"
+    private const val KEY_LAST_REMINDER_DATE = "last_reminder_date"
     private const val CHANNEL_ID = "move_daily_reminder"
     private const val ALARM_REQUEST_CODE = 7021
     private const val NOTIFICATION_ID = 7022
@@ -90,13 +91,19 @@ object ReminderScheduler {
 
         val zone = ZoneId.systemDefault()
         val now = ZonedDateTime.now(zone)
-        val todayEnd = now.toLocalDate().atTime(END_HOUR, 0).atZone(zone)
-        val date = if (now.plusMinutes(10).isBefore(todayEnd)) {
-            now.toLocalDate()
-        } else {
-            now.toLocalDate().plusDays(1)
-        }
+        val date = nextScheduleDate(now, lastReminderDate(prefs))
         scheduleForDate(context, date)
+    }
+
+    internal fun nextScheduleDate(
+        now: ZonedDateTime,
+        lastReminderDate: LocalDate?,
+    ): LocalDate {
+        val today = now.toLocalDate()
+        if (lastReminderDate == today) return today.plusDays(1)
+
+        val todayEnd = today.atTime(END_HOUR, 0).atZone(now.zone)
+        return if (now.plusMinutes(10).isBefore(todayEnd)) today else today.plusDays(1)
     }
 
     private fun scheduleForDate(context: Context, date: LocalDate) {
@@ -148,16 +155,32 @@ object ReminderScheduler {
     private fun preferences(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    private fun lastReminderDate(preferences: android.content.SharedPreferences): LocalDate? {
+        val stored = preferences.getString(KEY_LAST_REMINDER_DATE, null) ?: return null
+        return runCatching { LocalDate.parse(stored) }.getOrNull()
+    }
+
+    internal fun handleReminder(context: Context): Boolean {
+        val prefs = preferences(context)
+        if (!prefs.getBoolean(KEY_ENABLED, false)) return false
+
+        val today = LocalDate.now(ZoneId.systemDefault())
+        if (lastReminderDate(prefs) == today) return false
+
+        prefs.edit()
+            .putString(KEY_LAST_REMINDER_DATE, today.toString())
+            .putLong(KEY_NEXT_AT, 0L)
+            .apply()
+        showNotification(context)
+        return true
+    }
+
     internal fun showNotification(context: Context) {
         if (!notificationsAllowed(context)) return
+        val snapshot = MoveStateStore.snapshot(context)
+        if (snapshot.isCurrentDay && snapshot.goalsComplete) return
         ensureNotificationChannel(context)
-        val messages = listOf(
-            "A small move is still a move.",
-            "Stand up, stretch, and reset for a minute.",
-            "Give your body a quick movement break.",
-            "A few steps or a short stretch can reset your day.",
-            "Keep the rhythm going—move a little.",
-        )
+        val copy = reminderCopy(snapshot)
         val openApp = PendingIntent.getActivity(
             context,
             0,
@@ -168,8 +191,8 @@ object ReminderScheduler {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_move)
-            .setContentTitle("Time to move")
-            .setContentText(messages.random())
+            .setContentTitle(copy.first)
+            .setContentText(copy.second)
             .setContentIntent(openApp)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
@@ -178,12 +201,42 @@ object ReminderScheduler {
         context.getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, notification)
     }
+
+    private fun reminderCopy(snapshot: MoveStateStore.Snapshot): Pair<String, String> {
+        if (!snapshot.isCurrentDay) {
+            return "Time to move" to genericMessages().random()
+        }
+
+        val movementComplete = snapshot.movements >= snapshot.movementGoal
+        val stepsComplete = snapshot.steps >= snapshot.stepGoal
+        return when {
+            movementComplete && !stepsComplete ->
+                "Movement goal complete" to
+                    "A short walk can keep today’s rhythm going."
+            stepsComplete && !movementComplete ->
+                "Step goal complete" to
+                    "Your steps are in—one quick movement set can round out the day."
+            snapshot.movements > 0 || snapshot.steps > 0 ->
+                "Keep the momentum" to
+                    "You’re already moving. A small reset can bring both goals closer."
+            else -> "Time to move" to genericMessages().random()
+        }
+    }
+
+    private fun genericMessages() = listOf(
+        "A small move is still a move.",
+        "Stand up, stretch, and reset for a minute.",
+        "Give your body a quick movement break.",
+        "A few steps or a short stretch can reset your day.",
+        "Keep the rhythm going—move a little.",
+    )
 }
 
 class MoveReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        ReminderScheduler.showNotification(context)
-        ReminderScheduler.scheduleTomorrow(context)
+        if (ReminderScheduler.handleReminder(context)) {
+            ReminderScheduler.scheduleTomorrow(context)
+        }
     }
 }
 

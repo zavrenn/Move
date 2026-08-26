@@ -79,12 +79,11 @@ class MoveDatabase {
     await db.delete(_logsTable, where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<List<DailyStepCount>> getDailySteps({int limit = 30}) async {
+  Future<List<DailyStepCount>> getDailySteps() async {
     final db = await database;
     final rows = await db.query(
       _stepsTable,
       orderBy: 'date_key DESC',
-      limit: limit,
     );
     return rows.map(DailyStepCount.fromDatabase).toList();
   }

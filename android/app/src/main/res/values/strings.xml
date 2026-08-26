@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="move_widget_description">Today’s movement and step goals</string>
+    <string name="move_widget_icon_description">Move</string>
+</resources>

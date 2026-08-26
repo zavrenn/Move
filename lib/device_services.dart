@@ -106,3 +106,107 @@ class ReminderService {
     return ReminderStatus.fromPlatform(value ?? const {});
   }
 }
+
+class MovePreferences {
+  const MovePreferences({required this.goals, required this.quickMovementIds});
+
+  final DailyGoalSettings goals;
+  final List<String> quickMovementIds;
+
+  factory MovePreferences.fromPlatform(Map<Object?, Object?> map) {
+    final rawIds = (map['quickMovementIds'] as List<Object?>? ?? const [])
+        .whereType<String>();
+    final validIds = <String>[];
+    for (final id in rawIds) {
+      if (MovementCatalog.movements.any((movement) => movement.id == id) &&
+          !validIds.contains(id)) {
+        validIds.add(id);
+      }
+    }
+    return MovePreferences(
+      goals: DailyGoalSettings.fromPlatform(map),
+      quickMovementIds: validIds.length >= 2
+          ? validIds.take(8).toList()
+          : List.of(MovementCatalog.quickIds),
+    );
+  }
+}
+
+class MovePreferencesService {
+  const MovePreferencesService();
+
+  static const _channel = MethodChannel('com.med.move/device');
+
+  Future<MovePreferences> getPreferences() async {
+    if (!Platform.isAndroid) {
+      return MovePreferences(
+        goals: DailyGoalSettings.standard,
+        quickMovementIds: List.of(MovementCatalog.quickIds),
+      );
+    }
+    final value = await _channel.invokeMapMethod<Object?, Object?>(
+      'appPreferences',
+    );
+    return MovePreferences.fromPlatform(value ?? const {});
+  }
+
+  Future<DailyGoalSettings> setGoals(DailyGoalSettings goals) async {
+    final value = await _channel.invokeMapMethod<Object?, Object?>(
+      'setDailyGoals',
+      {'stepGoal': goals.stepGoal, 'movementGoal': goals.movementGoal},
+    );
+    return DailyGoalSettings.fromPlatform(value ?? const {});
+  }
+
+  Future<void> setQuickMovementIds(List<String> ids) {
+    return _channel.invokeMethod<void>('setQuickMovementIds', {'ids': ids});
+  }
+
+  Future<void> updateSnapshot({
+    required DateTime date,
+    required int steps,
+    required int movements,
+    required int streak,
+  }) {
+    return _channel.invokeMethod<void>('updateMoveSnapshot', {
+      'date':
+          '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}',
+      'steps': steps,
+      'movements': movements,
+      'streak': streak,
+    });
+  }
+}
+
+class HomeWidgetStatus {
+  const HomeWidgetStatus({required this.supported, required this.active});
+
+  final bool supported;
+  final bool active;
+
+  factory HomeWidgetStatus.fromPlatform(Map<Object?, Object?> map) {
+    return HomeWidgetStatus(
+      supported: map['supported'] as bool? ?? false,
+      active: map['active'] as bool? ?? false,
+    );
+  }
+}
+
+class HomeWidgetService {
+  const HomeWidgetService();
+
+  static const _channel = MethodChannel('com.med.move/device');
+
+  Future<HomeWidgetStatus> getStatus() async {
+    final value = await _channel.invokeMapMethod<Object?, Object?>(
+      'homeWidgetStatus',
+    );
+    return HomeWidgetStatus.fromPlatform(value ?? const {});
+  }
+
+  Future<bool> requestPin() async {
+    return await _channel.invokeMethod<bool>('pinHomeWidget') ?? false;
+  }
+}

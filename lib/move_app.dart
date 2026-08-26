@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'analytics.dart';
 import 'dashboard_screen.dart';
 import 'device_services.dart';
 import 'history_screen.dart';
@@ -11,6 +12,7 @@ import 'move_settings_sheet.dart';
 import 'move_theme.dart';
 import 'movement_log_sheet.dart';
 import 'progress_screen.dart';
+import 'quick_moves_sheet.dart';
 
 class MoveApp extends StatelessWidget {
   const MoveApp({super.key});
@@ -38,8 +40,11 @@ class MoveShell extends StatefulWidget {
 class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
   final _database = MoveDatabase.instance;
   final _health = const HealthConnectService();
+  final _preferences = const MovePreferencesService();
   List<MovementLog> _logs = const [];
   List<DailyStepCount> _steps = const [];
+  DailyGoalSettings _goals = DailyGoalSettings.standard;
+  List<String> _quickMovementIds = List.of(MovementCatalog.quickIds);
   HealthConnectStatus? _healthStatus;
   bool _syncingSteps = false;
   bool _loading = true;
@@ -72,14 +77,19 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
       final values = await Future.wait<Object>([
         _database.getAllLogs(),
         _database.getDailySteps(),
+        _preferences.getPreferences(),
       ]);
       if (!mounted) return;
+      final preferences = values[2] as MovePreferences;
       setState(() {
         _logs = values[0] as List<MovementLog>;
         _steps = values[1] as List<DailyStepCount>;
+        _goals = preferences.goals;
+        _quickMovementIds = preferences.quickMovementIds;
         _loading = false;
         _loadError = null;
       });
+      await _publishSnapshot();
       unawaited(_refreshSteps());
     } catch (error) {
       if (!mounted) return;
@@ -95,6 +105,7 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
       final logs = await _database.getAllLogs();
       if (!mounted) return;
       setState(() => _logs = logs);
+      await _publishSnapshot();
     } catch (error) {
       if (!mounted) return;
       rethrow;
@@ -118,7 +129,10 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
     } catch (_) {
       // Cached step totals remain available if Health Connect cannot refresh.
     } finally {
-      if (mounted) setState(() => _syncingSteps = false);
+      if (mounted) {
+        setState(() => _syncingSteps = false);
+        await _publishSnapshot();
+      }
     }
   }
 
@@ -136,7 +150,58 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
 
   Future<void> _openSettings() async {
     await showMoveSettings(context);
+    final preferences = await _preferences.getPreferences();
+    if (mounted) {
+      setState(() {
+        _goals = preferences.goals;
+        _quickMovementIds = preferences.quickMovementIds;
+      });
+      await _publishSnapshot();
+    }
     await _refreshSteps();
+  }
+
+  Future<void> _customizeQuickMoves() async {
+    final ids = await showQuickMovesEditor(
+      context,
+      initialIds: _quickMovementIds,
+    );
+    if (ids == null || !mounted) return;
+    try {
+      await _preferences.setQuickMovementIds(ids);
+      if (!mounted) return;
+      setState(() => _quickMovementIds = ids);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Quick Moves updated'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update Quick Moves.')),
+      );
+    }
+  }
+
+  Future<void> _publishSnapshot() async {
+    final movementAnalytics = MoveAnalytics(_logs);
+    final stepAnalytics = StepAnalytics(_steps);
+    final activity = ActivityAnalytics(
+      movements: movementAnalytics,
+      steps: stepAnalytics,
+    );
+    try {
+      await _preferences.updateSnapshot(
+        date: movementAnalytics.today,
+        steps: stepAnalytics.todaySteps,
+        movements: movementAnalytics.todayLogs.length,
+        streak: activity.currentStreak,
+      );
+    } catch (_) {
+      // Snapshot publishing only powers reminders and the home widget.
+    }
   }
 
   Future<void> _retryLoad() async {
@@ -193,6 +258,7 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
     if (id == null) return;
     final previousLogs = _logs;
     setState(() => _logs = _logs.where((item) => item.id != id).toList());
+    await _publishSnapshot();
     try {
       await _database.deleteLog(id);
       if (!mounted) return;
@@ -205,6 +271,8 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
     } catch (error) {
       if (!mounted) return;
       setState(() => _logs = previousLogs);
+      await _publishSnapshot();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not delete that log.')),
       );
@@ -220,6 +288,8 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
       DashboardScreen(
         logs: _logs,
         steps: _steps,
+        goals: _goals,
+        quickMovements: _quickMovementIds.map(MovementCatalog.byId).toList(),
         healthStatus: _healthStatus,
         syncingSteps: _syncingSteps,
         onLog: (movement) => _openLogger(movement: movement),
@@ -228,13 +298,14 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
         onConnectSteps: _connectSteps,
         onRefreshSteps: _refreshSteps,
         onOpenSettings: _openSettings,
+        onCustomizeQuickMoves: _customizeQuickMoves,
       ),
       HistoryScreen(
         logs: _logs,
         onEdit: (log) => _openLogger(existing: log),
         onDelete: _deleteLog,
       ),
-      ProgressScreen(logs: _logs, steps: _steps),
+      ProgressScreen(logs: _logs, steps: _steps, goals: _goals),
     ];
 
     return Scaffold(

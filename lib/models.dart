@@ -455,6 +455,43 @@ class DailyStepCount {
   }
 }
 
+class DailyGoalSettings {
+  const DailyGoalSettings({required this.stepGoal, required this.movementGoal});
+
+  static const standard = DailyGoalSettings(stepGoal: 8000, movementGoal: 3);
+
+  final int stepGoal;
+  final int movementGoal;
+
+  double stepProgress(int steps) => (steps / stepGoal).clamp(0.0, 1.0);
+
+  double movementProgress(int movements) =>
+      (movements / movementGoal).clamp(0.0, 1.0);
+
+  bool isComplete({required int steps, required int movements}) {
+    return steps >= stepGoal && movements >= movementGoal;
+  }
+
+  DailyGoalSettings copyWith({int? stepGoal, int? movementGoal}) {
+    return DailyGoalSettings(
+      stepGoal: stepGoal ?? this.stepGoal,
+      movementGoal: movementGoal ?? this.movementGoal,
+    );
+  }
+
+  factory DailyGoalSettings.fromPlatform(Map<Object?, Object?> map) {
+    return DailyGoalSettings(
+      stepGoal: ((map['stepGoal'] as num?)?.toInt() ?? standard.stepGoal)
+          .clamp(1000, 30000)
+          .toInt(),
+      movementGoal:
+          ((map['movementGoal'] as num?)?.toInt() ?? standard.movementGoal)
+              .clamp(1, 10)
+              .toInt(),
+    );
+  }
+}
+
 String formatAmount(MetricType metric, int amount) {
   if (metric == MetricType.reps) {
     return '$amount ${amount == 1 ? 'rep' : 'reps'}';

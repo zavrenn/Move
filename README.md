@@ -19,8 +19,11 @@ Move makes it fast to record small bursts of activity without accounts, subscrip
 - Left, right, and both-side tracking where useful
 - Optional notes plus log editing and deletion
 - Read-only daily steps through Android Health Connect
-- One optional, randomly timed daily movement reminder
-- Daily streaks, weekly activity, and a 35-day consistency view
+- Independent daily movement and step goals
+- One optional, progress-aware reminder at a random time from 5 AM to 11 PM
+- Customizable Quick Moves with add, remove, and drag ordering
+- Weekly recaps, daily streaks, and a 35-day consistency view
+- Compact Home-screen widget for today’s goals and progress
 - Per-movement rankings and progress summaries
 - Offline SQLite persistence
 - Purpose-built dark Material 3 interface
@@ -60,14 +63,16 @@ lib/
 ├── dashboard_screen.dart       Today dashboard
 ├── history_screen.dart         Filterable activity history
 ├── progress_screen.dart        Trends and consistency views
-└── movement_log_sheet.dart     Movement logging flow
+├── movement_log_sheet.dart     Movement logging flow
+├── quick_moves_sheet.dart      Quick Move customization
+└── device_services.dart        Health, reminders, goals, and widget bridge
 ```
 
 ## Data and privacy
 
 Move does not request network access or collect personal data. Movement logs are stored only in the app's local SQLite database. Removing the app also removes its local data unless Android restores it from a device backup.
 
-When enabled, Move reads only daily step totals from Health Connect and caches them locally for dashboard and progress metrics. It never writes health data. Daily reminders are scheduled entirely on-device.
+When enabled, Move reads only daily step totals from Health Connect and caches them locally for dashboard and progress metrics. It never writes health data. Goals, reminders, Quick Moves, and widget state remain entirely on-device.
 
 ## License
 

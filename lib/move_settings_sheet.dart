@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'device_services.dart';
+import 'models.dart';
 import 'move_theme.dart';
 import 'move_widgets.dart';
 
@@ -26,19 +27,38 @@ class _MoveSettingsSheet extends StatefulWidget {
   State<_MoveSettingsSheet> createState() => _MoveSettingsSheetState();
 }
 
-class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
+class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
+    with WidgetsBindingObserver {
   final _health = const HealthConnectService();
   final _reminders = const ReminderService();
+  final _preferences = const MovePreferencesService();
+  final _widget = const HomeWidgetService();
 
   HealthConnectStatus? _healthStatus;
   ReminderStatus? _reminderStatus;
+  DailyGoalSettings _goals = DailyGoalSettings.standard;
+  HomeWidgetStatus? _widgetStatus;
   bool _healthBusy = false;
   bool _reminderBusy = false;
+  bool _goalBusy = false;
+  bool _widgetBusy = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _loadWidgetStatus();
   }
 
   Future<void> _load() async {
@@ -46,15 +66,29 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
       final values = await Future.wait<Object>([
         _health.getStatus(),
         _reminders.getStatus(),
+        _preferences.getPreferences(),
+        _widget.getStatus(),
       ]);
       if (!mounted) return;
+      final preferences = values[2] as MovePreferences;
       setState(() {
         _healthStatus = values[0] as HealthConnectStatus;
         _reminderStatus = values[1] as ReminderStatus;
+        _goals = preferences.goals;
+        _widgetStatus = values[3] as HomeWidgetStatus;
       });
     } catch (_) {
       if (!mounted) return;
       _showError('Could not load settings.');
+    }
+  }
+
+  Future<void> _loadWidgetStatus() async {
+    try {
+      final status = await _widget.getStatus();
+      if (mounted) setState(() => _widgetStatus = status);
+    } catch (_) {
+      // The widget status will refresh the next time settings opens.
     }
   }
 
@@ -90,6 +124,40 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
       if (mounted) _showError('Could not update the daily reminder.');
     } finally {
       if (mounted) setState(() => _reminderBusy = false);
+    }
+  }
+
+  Future<void> _setGoals(DailyGoalSettings next) async {
+    if (_goalBusy) return;
+    final previous = _goals;
+    setState(() {
+      _goalBusy = true;
+      _goals = next;
+    });
+    try {
+      final saved = await _preferences.setGoals(next);
+      if (mounted) setState(() => _goals = saved);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _goals = previous);
+        _showError('Could not update daily goals.');
+      }
+    } finally {
+      if (mounted) setState(() => _goalBusy = false);
+    }
+  }
+
+  Future<void> _pinWidget() async {
+    if (_widgetBusy) return;
+    setState(() => _widgetBusy = true);
+    try {
+      final opened = await _widget.requestPin();
+      if (!mounted) return;
+      if (!opened) _showError('Add the Move widget from your widget picker.');
+    } catch (_) {
+      if (mounted) _showError('Could not open the widget picker.');
+    } finally {
+      if (mounted) setState(() => _widgetBusy = false);
     }
   }
 
@@ -140,7 +208,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
                 const SizedBox(height: 18),
                 const SectionTitle(
                   title: 'Daily reminder',
-                  subtitle: 'A gentle nudge—not a rigid schedule',
+                  subtitle: 'Adapts to progress and stays quiet when done',
                 ),
                 const SizedBox(height: 10),
                 SurfaceCard(
@@ -157,6 +225,65 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
                     ),
                     title: const Text('Remind me to move'),
                     subtitle: Text(_reminderDescription(reminder)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const SectionTitle(
+                  title: 'Daily goals',
+                  subtitle: 'Flexible targets for movement and walking',
+                ),
+                const SizedBox(height: 10),
+                SurfaceCard(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Column(
+                    children: [
+                      _GoalSettingRow(
+                        icon: Icons.task_alt_rounded,
+                        color: MoveColors.primary,
+                        label: 'Movement sets',
+                        value: '${_goals.movementGoal}',
+                        onDecrease: !_goalBusy && _goals.movementGoal > 1
+                            ? () => _setGoals(
+                                _goals.copyWith(
+                                  movementGoal: _goals.movementGoal - 1,
+                                ),
+                              )
+                            : null,
+                        onIncrease: !_goalBusy && _goals.movementGoal < 10
+                            ? () => _setGoals(
+                                _goals.copyWith(
+                                  movementGoal: _goals.movementGoal + 1,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const Divider(height: 1),
+                      _GoalSettingRow(
+                        icon: Icons.directions_walk_rounded,
+                        color: MoveColors.secondary,
+                        label: 'Daily steps',
+                        value: NumberFormat.decimalPattern().format(
+                          _goals.stepGoal,
+                        ),
+                        onDecrease: !_goalBusy && _goals.stepGoal > 1000
+                            ? () => _setGoals(
+                                _goals.copyWith(
+                                  stepGoal: _goals.stepGoal - 1000,
+                                ),
+                              )
+                            : null,
+                        onIncrease: !_goalBusy && _goals.stepGoal < 30000
+                            ? () => _setGoals(
+                                _goals.copyWith(
+                                  stepGoal: _goals.stepGoal + 1000,
+                                ),
+                              )
+                            : null,
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -216,6 +343,59 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 20),
+                const SectionTitle(
+                  title: 'Home-screen widget',
+                  subtitle: 'Your daily goals at a glance',
+                ),
+                const SizedBox(height: 10),
+                SurfaceCard(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: MoveColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.widgets_rounded,
+                          color: MoveColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _widgetStatus?.active == true
+                                  ? 'Widget active'
+                                  : 'Add Move to Home',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Shows today’s steps, sets, and targets.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (_widgetStatus?.supported == true)
+                        IconButton.filledTonal(
+                          onPressed: _widgetBusy ? null : _pinWidget,
+                          tooltip: _widgetStatus?.active == true
+                              ? 'Add another widget'
+                              : 'Add widget',
+                          icon: const Icon(Icons.add_rounded),
+                        ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 14),
                 Text(
                   'Move reads only daily step totals. It never writes health '
@@ -260,4 +440,58 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
     HealthConnectStatus.error => 'Try again after reopening Move.',
     null => 'Checking availability and permission status.',
   };
+}
+
+class _GoalSettingRow extends StatelessWidget {
+  const _GoalSettingRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.onDecrease,
+    required this.onIncrease,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+  final VoidCallback? onDecrease;
+  final VoidCallback? onIncrease;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 21),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(label, style: Theme.of(context).textTheme.titleSmall),
+          ),
+          IconButton(
+            onPressed: onDecrease,
+            tooltip: 'Decrease $label',
+            icon: const Icon(Icons.remove_rounded),
+          ),
+          SizedBox(
+            width: 58,
+            child: Text(
+              value,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+          IconButton(
+            onPressed: onIncrease,
+            tooltip: 'Increase $label',
+            icon: const Icon(Icons.add_rounded),
+          ),
+        ],
+      ),
+    );
+  }
 }

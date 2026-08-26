@@ -1,6 +1,8 @@
 package com.med.move
 
 import android.Manifest
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -58,6 +60,12 @@ class MainActivity : FlutterActivity() {
             "reminderStatus" -> result.success(ReminderScheduler.status(this))
             "requestNotificationPermission" -> requestNotificationPermission(result)
             "setReminderEnabled" -> setReminderEnabled(call, result)
+            "appPreferences" -> result.success(MoveStateStore.preferencesMap(this))
+            "setDailyGoals" -> setDailyGoals(call, result)
+            "setQuickMovementIds" -> setQuickMovementIds(call, result)
+            "updateMoveSnapshot" -> updateMoveSnapshot(call, result)
+            "homeWidgetStatus" -> homeWidgetStatus(result)
+            "pinHomeWidget" -> pinHomeWidget(result)
             else -> result.notImplemented()
         }
     }
@@ -204,6 +212,60 @@ class MainActivity : FlutterActivity() {
         }
         ReminderScheduler.setEnabled(this, enabled)
         result.success(ReminderScheduler.status(this))
+    }
+
+    private fun setDailyGoals(call: MethodCall, result: MethodChannel.Result) {
+        val stepGoal = call.argument<Int>("stepGoal") ?: MoveStateStore.DEFAULT_STEP_GOAL
+        val movementGoal =
+            call.argument<Int>("movementGoal") ?: MoveStateStore.DEFAULT_MOVEMENT_GOAL
+        result.success(MoveStateStore.setGoals(this, stepGoal, movementGoal))
+    }
+
+    private fun setQuickMovementIds(call: MethodCall, result: MethodChannel.Result) {
+        val ids = call.argument<List<*>>("ids")?.filterIsInstance<String>().orEmpty()
+        if (ids.size !in 2..8) {
+            result.error("invalid_quick_moves", "Choose between 2 and 8 Quick Moves.", null)
+            return
+        }
+        MoveStateStore.setQuickMovementIds(this, ids)
+        result.success(null)
+    }
+
+    private fun updateMoveSnapshot(call: MethodCall, result: MethodChannel.Result) {
+        val date = call.argument<String>("date")
+        if (date.isNullOrBlank()) {
+            result.error("invalid_snapshot", "A snapshot date is required.", null)
+            return
+        }
+        MoveStateStore.updateSnapshot(
+            context = this,
+            date = date,
+            steps = call.argument<Int>("steps") ?: 0,
+            movements = call.argument<Int>("movements") ?: 0,
+            streak = call.argument<Int>("streak") ?: 0,
+        )
+        result.success(null)
+    }
+
+    private fun homeWidgetStatus(result: MethodChannel.Result) {
+        val manager = AppWidgetManager.getInstance(this)
+        val component = ComponentName(this, MoveWidgetProvider::class.java)
+        result.success(
+            mapOf(
+                "supported" to manager.isRequestPinAppWidgetSupported,
+                "active" to manager.getAppWidgetIds(component).isNotEmpty(),
+            ),
+        )
+    }
+
+    private fun pinHomeWidget(result: MethodChannel.Result) {
+        val manager = AppWidgetManager.getInstance(this)
+        if (!manager.isRequestPinAppWidgetSupported) {
+            result.success(false)
+            return
+        }
+        val provider = ComponentName(this, MoveWidgetProvider::class.java)
+        result.success(manager.requestPinAppWidget(provider, null, null))
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
