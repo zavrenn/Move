@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" width="340" alt="Move v1.1.1 dashboard on Android">
+  <img src="docs/media/move-v1.1.1-demo.gif" width="340" alt="Move v1.1.1 app walkthrough on Android">
 </p>
 
 ## About
