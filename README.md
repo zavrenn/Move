@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" width="340" alt="Move v1.1.0 dashboard on Android">
+  <img src="docs/screenshots/dashboard.png" width="340" alt="Move v1.1.1 dashboard on Android">
 </p>
 
 ## About
