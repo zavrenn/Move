@@ -1,16 +1,16 @@
 <div align="center">
   <img src="assets/icon/move_icon_foreground.png" width="104" alt="Move app icon">
   <h1>Move</h1>
-  <p>A focused, private movement logger for people who spend a lot of time sitting.</p>
+  <p>A private, offline companion for daily movement, walking, and consistency.</p>
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" width="340" alt="Move dashboard on Android">
+  <img src="docs/screenshots/dashboard.png" width="340" alt="Move v1.1.0 dashboard on Android">
 </p>
 
 ## About
 
-Move makes it fast to record small bursts of activity without accounts, subscriptions, or setup. Log repetitions such as squats, push-ups, and hand-grip squeezes, or timed movements such as planks and stretches. All data stays in a local SQLite database on the device.
+Move makes it fast to record small bursts of activity without accounts or subscriptions. Log repetitions such as squats and push-ups, track timed movements such as planks and stretches, and bring in daily steps through read-only Health Connect access. Activity history and preferences stay on the device.
 
 ## Features
 
@@ -18,11 +18,11 @@ Move makes it fast to record small bursts of activity without accounts, subscrip
 - 24 room-friendly strength and mobility movements
 - Left, right, and both-side tracking where useful
 - Optional notes plus log editing and deletion
-- Read-only daily steps through Android Health Connect
+- Read-only daily steps through Android Health Connect, including Samsung Health
 - Independent daily movement and step goals
 - One optional, progress-aware reminder at a random time from 5 AM to 11 PM
 - Customizable Quick Moves with add, remove, and drag ordering
-- Weekly recaps, daily streaks, and a 35-day consistency view
+- Weekly recaps, unified active-day streaks, and a 35-day consistency view
 - Compact Home-screen widget for today’s goals and progress
 - Per-movement rankings and progress summaries
 - Offline SQLite persistence
@@ -30,6 +30,10 @@ Move makes it fast to record small bursts of activity without accounts, subscrip
 - Adaptive Android launcher icon
 
 Accounts and cloud synchronization are intentionally outside the current scope.
+
+## Download
+
+Download the latest Android APK from [GitHub Releases](https://github.com/zavrenn/Move/releases/latest). Move supports Android 8.0 and newer; automatic step tracking requires Health Connect.
 
 ## Run locally
 
@@ -51,6 +55,8 @@ dart run flutter_launcher_icons
 ```sh
 flutter analyze
 flutter test
+cd android
+./gradlew :app:testDebugUnitTest
 ```
 
 ## Project structure
@@ -65,7 +71,14 @@ lib/
 ├── progress_screen.dart        Trends and consistency views
 ├── movement_log_sheet.dart     Movement logging flow
 ├── quick_moves_sheet.dart      Quick Move customization
+├── move_settings_sheet.dart    Goals, reminders, Health, and widget settings
 └── device_services.dart        Health, reminders, goals, and widget bridge
+
+android/app/src/main/kotlin/com/med/move/
+├── MainActivity.kt             Health Connect and Flutter platform bridge
+├── ReminderScheduler.kt        Daily reminder scheduling and delivery
+├── MoveStateStore.kt           Shared goal, widget, and reminder state
+└── MoveWidgetProvider.kt       Native home-screen widget
 ```
 
 ## Data and privacy
