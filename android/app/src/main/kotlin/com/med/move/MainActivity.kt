@@ -10,6 +10,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import io.flutter.embedding.android.FlutterActivity
@@ -29,6 +30,7 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "com.med.move/device"
         private const val REQUEST_HEALTH_PERMISSIONS = 4101
         private const val REQUEST_NOTIFICATION_PERMISSION = 4102
+        private const val SAMSUNG_HEALTH_PACKAGE = "com.sec.android.app.shealth"
     }
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -153,6 +155,7 @@ class MainActivity : FlutterActivity() {
                         AggregateRequest(
                             metrics = setOf(StepsRecord.COUNT_TOTAL),
                             timeRangeFilter = TimeRangeFilter.between(start, end),
+                            dataOriginFilter = setOf(DataOrigin(SAMSUNG_HEALTH_PACKAGE)),
                         ),
                     )
                     values.add(
