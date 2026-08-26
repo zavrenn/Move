@@ -38,6 +38,42 @@ class PeriodTotals {
   final int seconds;
 }
 
+class StepDayActivity {
+  const StepDayActivity({required this.date, required this.steps});
+
+  final DateTime date;
+  final int steps;
+}
+
+class StepAnalytics {
+  StepAnalytics(this.values, {DateTime? now}) : now = now ?? DateTime.now();
+
+  final List<DailyStepCount> values;
+  final DateTime now;
+
+  DateTime get today => DateTime(now.year, now.month, now.day);
+
+  int stepsOn(DateTime date) {
+    final target = DateTime(date.year, date.month, date.day);
+    for (final value in values) {
+      if (value.date == target) return value.steps;
+    }
+    return 0;
+  }
+
+  int get todaySteps => stepsOn(today);
+
+  List<StepDayActivity> get lastSevenDays => List.generate(7, (index) {
+    final date = DateTime(today.year, today.month, today.day + index - 6);
+    return StepDayActivity(date: date, steps: stepsOn(date));
+  });
+
+  int get lastSevenTotal =>
+      lastSevenDays.fold(0, (total, value) => total + value.steps);
+
+  int get dailyAverage => (lastSevenTotal / 7).round();
+}
+
 class MoveAnalytics {
   MoveAnalytics(this.logs, {DateTime? now}) : now = now ?? DateTime.now();
 

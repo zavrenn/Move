@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'analytics.dart';
 import 'models.dart';
@@ -8,13 +9,15 @@ import 'move_theme.dart';
 import 'move_widgets.dart';
 
 class ProgressScreen extends StatelessWidget {
-  const ProgressScreen({super.key, required this.logs});
+  const ProgressScreen({super.key, required this.logs, required this.steps});
 
   final List<MovementLog> logs;
+  final List<DailyStepCount> steps;
 
   @override
   Widget build(BuildContext context) {
     final analytics = MoveAnalytics(logs);
+    final stepAnalytics = StepAnalytics(steps);
     final summaries = analytics.movementSummaries;
     final thisWeek = analytics.thisWeek;
     final previousWeek = analytics.previousWeek;
@@ -53,6 +56,16 @@ class ProgressScreen extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 30),
+            const SectionTitle(
+              title: 'Walking',
+              subtitle: 'Automatically tracked through Health Connect',
+            ),
+            const SizedBox(height: 13),
+            _StepsProgressCard(
+              analytics: stepAnalytics,
+              connected: steps.isNotEmpty,
             ),
             const SizedBox(height: 30),
             const SectionTitle(
@@ -105,6 +118,71 @@ class ProgressScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _StepsProgressCard extends StatelessWidget {
+  const _StepsProgressCard({required this.analytics, required this.connected});
+
+  final StepAnalytics analytics;
+  final bool connected;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = NumberFormat.decimalPattern();
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _StepMetric(
+                  label: 'TODAY',
+                  value: connected
+                      ? formatter.format(analytics.todaySteps)
+                      : '—',
+                ),
+              ),
+              Container(width: 1, height: 39, color: MoveColors.border),
+              Expanded(
+                child: _StepMetric(
+                  label: '7-DAY AVERAGE',
+                  value: connected
+                      ? formatter.format(analytics.dailyAverage)
+                      : '—',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          StepBarChart(days: analytics.lastSevenDays),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepMetric extends StatelessWidget {
+  const _StepMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(color: MoveColors.secondary),
+        ),
+        const SizedBox(height: 3),
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
+      ],
     );
   }
 }

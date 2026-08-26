@@ -15,16 +15,18 @@ Move makes it fast to record small bursts of activity without accounts, subscrip
 ## Features
 
 - Quick repetition and duration logging
-- 18 room-friendly strength and mobility movements
+- 24 room-friendly strength and mobility movements
 - Left, right, and both-side tracking where useful
 - Optional notes plus log editing and deletion
+- Read-only daily steps through Android Health Connect
+- One optional, randomly timed daily movement reminder
 - Daily streaks, weekly activity, and a 35-day consistency view
 - Per-movement rankings and progress summaries
 - Offline SQLite persistence
 - Purpose-built dark Material 3 interface
 - Adaptive Android launcher icon
 
-Reminders, notifications, accounts, and cloud synchronization are intentionally outside the current MVP.
+Accounts and cloud synchronization are intentionally outside the current scope.
 
 ## Run locally
 
@@ -64,6 +66,8 @@ lib/
 ## Data and privacy
 
 Move does not request network access or collect personal data. Movement logs are stored only in the app's local SQLite database. Removing the app also removes its local data unless Android restores it from a device backup.
+
+When enabled, Move reads only daily step totals from Health Connect and caches them locally for dashboard and progress metrics. It never writes health data. Daily reminders are scheduled entirely on-device.
 
 ## License
 

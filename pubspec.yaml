@@ -71,7 +71,7 @@ flutter_launcher_icons:
   adaptive_icon_background: "#080B0A"
   adaptive_icon_foreground: assets/icon/move_icon_foreground.png
   adaptive_icon_foreground_inset: 18
-  min_sdk_android: 21
+  min_sdk_android: 26
 
   # To add assets to your application, add an assets section, like this:
   # assets:

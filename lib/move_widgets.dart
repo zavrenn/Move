@@ -257,6 +257,83 @@ class WeekBarChart extends StatelessWidget {
   }
 }
 
+class StepBarChart extends StatelessWidget {
+  const StepBarChart({super.key, required this.days});
+
+  final List<StepDayActivity> days;
+
+  @override
+  Widget build(BuildContext context) {
+    final maximum = math.max(
+      1,
+      days.fold<int>(0, (value, day) => math.max(value, day.steps)),
+    );
+    final today = DateTime.now();
+    final formatter = NumberFormat.compact();
+    return SizedBox(
+      height: 132,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: days.map((day) {
+          final selected =
+              day.date.year == today.year &&
+              day.date.month == today.month &&
+              day.date.day == today.day;
+          final fraction = day.steps / maximum;
+          return Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  day.steps == 0 ? '' : formatter.format(day.steps),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: selected
+                        ? MoveColors.primary
+                        : MoveColors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Container(
+                  height: 78,
+                  width: 22,
+                  alignment: Alignment.bottomCenter,
+                  decoration: BoxDecoration(
+                    color: MoveColors.surfaceHigh,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 450),
+                    curve: Curves.easeOutCubic,
+                    height: day.steps == 0 ? 5 : math.max(9, 78 * fraction),
+                    width: 22,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? MoveColors.primary
+                          : MoveColors.secondary.withValues(alpha: 0.64),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  DateFormat.E().format(day.date).substring(0, 1),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: selected
+                        ? MoveColors.textPrimary
+                        : MoveColors.textSecondary,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,

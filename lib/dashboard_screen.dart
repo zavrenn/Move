@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'analytics.dart';
+import 'device_services.dart';
 import 'models.dart';
 import 'move_theme.dart';
 import 'move_widgets.dart';
@@ -10,112 +11,147 @@ class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
     super.key,
     required this.logs,
+    required this.steps,
+    required this.healthStatus,
+    required this.syncingSteps,
     required this.onLog,
     required this.onEdit,
     required this.onOpenHistory,
+    required this.onConnectSteps,
+    required this.onRefreshSteps,
+    required this.onOpenSettings,
   });
 
   final List<MovementLog> logs;
+  final List<DailyStepCount> steps;
+  final HealthConnectStatus? healthStatus;
+  final bool syncingSteps;
   final ValueChanged<MovementDefinition> onLog;
   final ValueChanged<MovementLog> onEdit;
   final VoidCallback onOpenHistory;
+  final Future<void> Function() onConnectSteps;
+  final Future<void> Function() onRefreshSteps;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
     final analytics = MoveAnalytics(logs);
+    final stepAnalytics = StepAnalytics(steps);
     final recent = logs.take(3).toList();
 
     return SafeArea(
       bottom: false,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 118),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _DashboardHeader(streak: analytics.currentStreak),
-            const SizedBox(height: 28),
-            Text(
-              'Keep your body\nin motion.',
-              style: Theme.of(context).textTheme.displaySmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              DateFormat('EEEE, d MMMM').format(DateTime.now()),
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 24),
-            _TodayCard(analytics: analytics),
-            const SizedBox(height: 30),
-            const SectionTitle(
-              title: 'This week',
-              subtitle: 'Every logged set keeps the rhythm going',
-            ),
-            const SizedBox(height: 13),
-            SurfaceCard(
-              padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
-              child: WeekBarChart(days: analytics.lastSevenDays),
-            ),
-            const SizedBox(height: 30),
-            const SectionTitle(
-              title: 'Quick move',
-              subtitle: 'Your most useful room-friendly movements',
-            ),
-            const SizedBox(height: 13),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final width = (constraints.maxWidth - 12) / 2;
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: MovementCatalog.quickMovements.map((movement) {
-                    return SizedBox(
-                      width: width,
-                      child: _QuickMovementCard(
-                        movement: movement,
-                        onTap: () => onLog(movement),
+      child: RefreshIndicator(
+        onRefresh: onRefreshSteps,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 118),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DashboardHeader(
+                streak: analytics.currentStreak,
+                onSettings: onOpenSettings,
+              ),
+              const SizedBox(height: 28),
+              Text(
+                'Keep your body\nin motion.',
+                style: Theme.of(context).textTheme.displaySmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                DateFormat('EEEE, d MMMM').format(DateTime.now()),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 24),
+              _TodayCard(
+                analytics: analytics,
+                stepAnalytics: stepAnalytics,
+                showCachedSteps:
+                    steps.isNotEmpty ||
+                    healthStatus == HealthConnectStatus.connected,
+                syncingSteps: syncingSteps,
+              ),
+              if (healthStatus == HealthConnectStatus.permissionRequired) ...[
+                const SizedBox(height: 12),
+                _StepsSetupCard(onConnect: onConnectSteps),
+              ],
+              const SizedBox(height: 30),
+              const SectionTitle(
+                title: 'This week',
+                subtitle: 'Every logged set keeps the rhythm going',
+              ),
+              const SizedBox(height: 13),
+              SurfaceCard(
+                padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
+                child: WeekBarChart(days: analytics.lastSevenDays),
+              ),
+              const SizedBox(height: 30),
+              const SectionTitle(
+                title: 'Quick move',
+                subtitle: 'Your most useful room-friendly movements',
+              ),
+              const SizedBox(height: 13),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = (constraints.maxWidth - 12) / 2;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: MovementCatalog.quickMovements.map((movement) {
+                      return SizedBox(
+                        width: width,
+                        child: _QuickMovementCard(
+                          movement: movement,
+                          onTap: () => onLog(movement),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 30),
+              SectionTitle(
+                title: 'Recent activity',
+                subtitle: recent.isEmpty
+                    ? 'Your latest logs will appear here'
+                    : 'Tap a log to edit it',
+                action: recent.isEmpty
+                    ? null
+                    : TextButton(
+                        onPressed: onOpenHistory,
+                        child: const Text('View all'),
                       ),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-            const SizedBox(height: 30),
-            SectionTitle(
-              title: 'Recent activity',
-              subtitle: recent.isEmpty
-                  ? 'Your latest logs will appear here'
-                  : 'Tap a log to edit it',
-              action: recent.isEmpty
-                  ? null
-                  : TextButton(
-                      onPressed: onOpenHistory,
-                      child: const Text('View all'),
-                    ),
-            ),
-            const SizedBox(height: 10),
-            SurfaceCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: recent.isEmpty
-                  ? const EmptyState(
-                      icon: Icons.add_task_rounded,
-                      title: 'Ready when you are',
-                      message:
-                          'Tap a quick move or the + button to log your first set.',
-                    )
-                  : Column(
-                      children: [
-                        for (var i = 0; i < recent.length; i++) ...[
-                          LogTile(
-                            log: recent[i],
-                            onTap: () => onEdit(recent[i]),
-                            showDate: true,
-                          ),
-                          if (i != recent.length - 1) const Divider(height: 1),
+              ),
+              const SizedBox(height: 10),
+              SurfaceCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                child: recent.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.add_task_rounded,
+                        title: 'Ready when you are',
+                        message:
+                            'Tap a quick move or the + button to log your first set.',
+                      )
+                    : Column(
+                        children: [
+                          for (var i = 0; i < recent.length; i++) ...[
+                            LogTile(
+                              log: recent[i],
+                              onTap: () => onEdit(recent[i]),
+                              showDate: true,
+                            ),
+                            if (i != recent.length - 1)
+                              const Divider(height: 1),
+                          ],
                         ],
-                      ],
-                    ),
-            ),
-          ],
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -123,9 +159,10 @@ class DashboardScreen extends StatelessWidget {
 }
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.streak});
+  const _DashboardHeader({required this.streak, required this.onSettings});
 
   final int streak;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +190,12 @@ class _DashboardHeader extends StatelessWidget {
           ),
         ),
         const Spacer(),
+        IconButton(
+          onPressed: onSettings,
+          tooltip: 'Settings',
+          icon: const Icon(Icons.tune_rounded, color: MoveColors.textSecondary),
+        ),
+        const SizedBox(width: 3),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
           decoration: BoxDecoration(
@@ -181,9 +224,17 @@ class _DashboardHeader extends StatelessWidget {
 }
 
 class _TodayCard extends StatelessWidget {
-  const _TodayCard({required this.analytics});
+  const _TodayCard({
+    required this.analytics,
+    required this.stepAnalytics,
+    required this.showCachedSteps,
+    required this.syncingSteps,
+  });
 
   final MoveAnalytics analytics;
+  final StepAnalytics stepAnalytics;
+  final bool showCachedSteps;
+  final bool syncingSteps;
 
   @override
   Widget build(BuildContext context) {
@@ -226,6 +277,14 @@ class _TodayCard extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
+                    if (syncingSteps) ...[
+                      const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
                     const Icon(Icons.bolt_rounded, color: MoveColors.primary),
                   ],
                 ),
@@ -266,11 +325,62 @@ class _TodayCard extends StatelessWidget {
                         label: 'duration',
                       ),
                     ),
+                    Container(width: 1, height: 36, color: MoveColors.border),
+                    Expanded(
+                      child: _TodayMetric(
+                        icon: Icons.directions_walk_rounded,
+                        value: showCachedSteps
+                            ? NumberFormat.compact().format(
+                                stepAnalytics.todaySteps,
+                              )
+                            : '—',
+                        label: 'steps',
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepsSetupCard extends StatelessWidget {
+  const _StepsSetupCard({required this.onConnect});
+
+  final Future<void> Function() onConnect;
+
+  @override
+  Widget build(BuildContext context) {
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(16, 13, 12, 13),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.directions_walk_rounded,
+            color: MoveColors.secondary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bring in your daily steps',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Read-only through Health Connect',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          TextButton(onPressed: onConnect, child: const Text('Connect')),
         ],
       ),
     );

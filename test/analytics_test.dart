@@ -50,4 +50,19 @@ void main() {
     expect(analytics.todayReps, 20);
     expect(analytics.todaySeconds, 45);
   });
+
+  test(
+    'step analytics fills missing days and calculates seven-day average',
+    () {
+      final analytics = StepAnalytics([
+        DailyStepCount(date: DateTime(2026, 8, 25), steps: 7000, syncedAt: now),
+        DailyStepCount(date: DateTime(2026, 8, 24), steps: 3500, syncedAt: now),
+      ], now: now);
+
+      expect(analytics.todaySteps, 7000);
+      expect(analytics.lastSevenDays.length, 7);
+      expect(analytics.lastSevenTotal, 10500);
+      expect(analytics.dailyAverage, 1500);
+    },
+  );
 }

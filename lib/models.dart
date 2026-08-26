@@ -166,6 +166,36 @@ abstract final class MovementCatalog {
       presets: [15, 30, 45, 60],
     ),
     MovementDefinition(
+      id: 'sit_to_stand',
+      name: 'Sit-to-stands',
+      description: 'Desk-friendly leg strength',
+      category: MovementCategory.strength,
+      metric: MetricType.reps,
+      icon: Icons.event_seat_rounded,
+      color: Color(0xFFB7EF6A),
+      presets: [5, 10, 15, 20],
+    ),
+    MovementDefinition(
+      id: 'dead_bug',
+      name: 'Dead bugs',
+      description: 'Gentle core control',
+      category: MovementCategory.strength,
+      metric: MetricType.reps,
+      icon: Icons.multiple_stop_rounded,
+      color: Color(0xFF8DEB8B),
+      presets: [6, 10, 12, 16],
+    ),
+    MovementDefinition(
+      id: 'standing_march',
+      name: 'Standing march',
+      description: 'Quick circulation reset',
+      category: MovementCategory.strength,
+      metric: MetricType.duration,
+      icon: Icons.directions_run_rounded,
+      color: Color(0xFFA7F06E),
+      presets: [30, 45, 60, 90],
+    ),
+    MovementDefinition(
       id: 'chest_stretch',
       name: 'Doorway chest',
       description: 'Open chest & shoulders',
@@ -250,6 +280,38 @@ abstract final class MovementCatalog {
       color: Color(0xFF60D3DC),
       presets: [20, 30, 45, 60],
       supportsSides: true,
+    ),
+    MovementDefinition(
+      id: 'thoracic_rotation',
+      name: 'Thoracic rotations',
+      description: 'Upper-back mobility',
+      category: MovementCategory.mobility,
+      metric: MetricType.reps,
+      icon: Icons.rotate_90_degrees_ccw_rounded,
+      color: Color(0xFF51DDB6),
+      presets: [5, 8, 10, 12],
+      supportsSides: true,
+    ),
+    MovementDefinition(
+      id: 'ankle_circle',
+      name: 'Ankle circles',
+      description: 'Ankle mobility & circulation',
+      category: MovementCategory.mobility,
+      metric: MetricType.reps,
+      icon: Icons.rotate_left_rounded,
+      color: Color(0xFF58D9CC),
+      presets: [5, 10, 15, 20],
+      supportsSides: true,
+    ),
+    MovementDefinition(
+      id: 'child_pose',
+      name: 'Child’s pose',
+      description: 'Back, hips & shoulders',
+      category: MovementCategory.mobility,
+      metric: MetricType.duration,
+      icon: Icons.self_improvement_rounded,
+      color: Color(0xFF62D5E2),
+      presets: [20, 30, 45, 60],
     ),
   ];
 
@@ -350,6 +412,45 @@ class MovementLog {
       note: note ?? this.note,
       performedAt: performedAt ?? this.performedAt,
       createdAt: createdAt ?? this.createdAt,
+    );
+  }
+}
+
+class DailyStepCount {
+  const DailyStepCount({
+    required this.date,
+    required this.steps,
+    required this.syncedAt,
+  });
+
+  final DateTime date;
+  final int steps;
+  final DateTime syncedAt;
+
+  int get dateKey => date.year * 10000 + date.month * 100 + date.day;
+
+  Map<String, Object?> toDatabaseMap() => {
+    'date_key': dateKey,
+    'steps': steps,
+    'synced_at': syncedAt.millisecondsSinceEpoch,
+  };
+
+  factory DailyStepCount.fromDatabase(Map<String, Object?> map) {
+    final key = map['date_key'] as int;
+    return DailyStepCount(
+      date: DateTime(key ~/ 10000, (key ~/ 100) % 100, key % 100),
+      steps: map['steps'] as int,
+      syncedAt: DateTime.fromMillisecondsSinceEpoch(map['synced_at'] as int),
+    );
+  }
+
+  factory DailyStepCount.fromPlatform(Map<Object?, Object?> map) {
+    final parts = (map['date'] as String).split('-').map(int.parse).toList();
+    final value = map['steps'] as num;
+    return DailyStepCount(
+      date: DateTime(parts[0], parts[1], parts[2]),
+      steps: value.toInt(),
+      syncedAt: DateTime.now(),
     );
   }
 }

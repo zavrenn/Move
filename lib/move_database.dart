@@ -8,8 +8,9 @@ class MoveDatabase {
 
   static final MoveDatabase instance = MoveDatabase._();
   static const _databaseName = 'move.db';
-  static const _databaseVersion = 1;
+  static const _databaseVersion = 2;
   static const _logsTable = 'movement_logs';
+  static const _stepsTable = 'daily_steps';
 
   Database? _database;
 
@@ -37,6 +38,10 @@ class MoveDatabase {
         await database.execute(
           'CREATE INDEX idx_logs_performed_at ON $_logsTable(performed_at DESC)',
         );
+        await _createStepsTable(database);
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) await _createStepsTable(database);
       },
     );
     _database = db;
@@ -72,5 +77,39 @@ class MoveDatabase {
   Future<void> deleteLog(int id) async {
     final db = await database;
     await db.delete(_logsTable, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<DailyStepCount>> getDailySteps({int limit = 30}) async {
+    final db = await database;
+    final rows = await db.query(
+      _stepsTable,
+      orderBy: 'date_key DESC',
+      limit: limit,
+    );
+    return rows.map(DailyStepCount.fromDatabase).toList();
+  }
+
+  Future<void> upsertDailySteps(List<DailyStepCount> values) async {
+    if (values.isEmpty) return;
+    final db = await database;
+    final batch = db.batch();
+    for (final value in values) {
+      batch.insert(
+        _stepsTable,
+        value.toDatabaseMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  static Future<void> _createStepsTable(Database database) {
+    return database.execute('''
+      CREATE TABLE $_stepsTable (
+        date_key INTEGER PRIMARY KEY,
+        steps INTEGER NOT NULL CHECK(steps >= 0),
+        synced_at INTEGER NOT NULL
+      )
+    ''');
   }
 }
