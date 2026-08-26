@@ -70,7 +70,7 @@ abstract final class MoveTheme {
         surfaceTintColor: Colors.transparent,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 70,
+        height: 64,
         backgroundColor: MoveColors.surface,
         indicatorColor: MoveColors.primary.withValues(alpha: 0.14),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {

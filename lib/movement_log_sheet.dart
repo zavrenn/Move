@@ -18,7 +18,7 @@ Future<MovementLog?> showMovementLogger(
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.72),
     builder: (context) => FractionallySizedBox(
-      heightFactor: 0.93,
+      heightFactor: 0.9,
       child: MovementLogSheet(initialMovement: movement, existing: existing),
     ),
   );
@@ -133,6 +133,10 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 220),
+              layoutBuilder: (currentChild, previousChildren) => Stack(
+                alignment: Alignment.topCenter,
+                children: [...previousChildren, ?currentChild],
+              ),
               child: _selected == null
                   ? _buildPicker()
                   : _buildAmountEditor(_selected!),
@@ -157,7 +161,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
 
     return Padding(
       key: const ValueKey('movement-picker'),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -185,7 +189,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           TextField(
             controller: _searchController,
             onChanged: (_) => setState(() {}),
@@ -195,7 +199,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
               isDense: true,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 9,
             children: [
@@ -215,14 +219,14 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
           const SizedBox(height: 8),
           Expanded(
             child: ListView.separated(
-              padding: const EdgeInsets.only(top: 5, bottom: 24),
+              padding: const EdgeInsets.only(top: 3, bottom: 20),
               itemCount: filtered.length,
               separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final movement = filtered[index];
                 return ListTile(
                   contentPadding: const EdgeInsets.symmetric(
-                    vertical: 5,
+                    vertical: 2,
                     horizontal: 2,
                   ),
                   onTap: () => _chooseMovement(movement),
@@ -252,7 +256,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
 
     return SingleChildScrollView(
       key: ValueKey('amount-${movement.id}'),
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + keyboardInset),
+      padding: EdgeInsets.fromLTRB(18, 10, 18, 20 + keyboardInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -279,9 +283,9 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 22),
-          Center(child: MovementGlyph(movement: movement, size: 72)),
           const SizedBox(height: 14),
+          Center(child: MovementGlyph(movement: movement, size: 64)),
+          const SizedBox(height: 10),
           Text(
             movement.name,
             textAlign: TextAlign.center,
@@ -293,7 +297,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -329,7 +333,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Wrap(
             alignment: WrapAlignment.center,
             spacing: 9,
@@ -349,7 +353,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
             }).toList(),
           ),
           if (movement.supportsSides) ...[
-            const SizedBox(height: 28),
+            const SizedBox(height: 22),
             Text('SIDE', style: _fieldLabelStyle(context)),
             const SizedBox(height: 10),
             SegmentedButton<MovementSide>(
@@ -371,7 +375,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
               ),
             ),
           ],
-          const SizedBox(height: 25),
+          const SizedBox(height: 20),
           Text('NOTE · OPTIONAL', style: _fieldLabelStyle(context)),
           const SizedBox(height: 10),
           TextField(
@@ -384,7 +388,7 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
               counterText: '',
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -404,11 +408,11 @@ class _MovementLogSheetState extends State<MovementLogSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _save,
             style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(58),
+              minimumSize: const Size.fromHeight(54),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
               ),

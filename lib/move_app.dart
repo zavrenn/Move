@@ -240,11 +240,11 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
     return Scaffold(
       extendBody: true,
       body: IndexedStack(index: _tab, children: screens),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: _openLogger,
         elevation: 3,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('LOG MOVE'),
+        tooltip: 'Log move',
+        child: const Icon(Icons.add_rounded),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: Container(

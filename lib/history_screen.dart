@@ -78,21 +78,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: CustomScrollView(
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
             sliver: SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'History',
-                    style: Theme.of(context).textTheme.displaySmall,
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 2),
                   Text(
                     '${widget.logs.length} total set${widget.logs.length == 1 ? '' : 's'}',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
                     child: SegmentedButton<_HistoryFilter>(
@@ -136,16 +136,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+              padding: const EdgeInsets.fromLTRB(18, 6, 18, 104),
               sliver: SliverList.list(
                 children: groups.entries.map((entry) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.only(bottom: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.only(left: 4, bottom: 9),
+                          padding: const EdgeInsets.only(left: 2, bottom: 6),
                           child: Text(
                             _dayLabel(entry.key),
                             style: Theme.of(context).textTheme.labelLarge
@@ -154,8 +154,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ),
                         SurfaceCard(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 5,
+                            horizontal: 14,
+                            vertical: 3,
                           ),
                           child: Column(
                             children: [

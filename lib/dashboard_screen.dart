@@ -45,7 +45,7 @@ class DashboardScreen extends StatelessWidget {
         onRefresh: onRefreshSteps,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 118),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 104),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -53,17 +53,22 @@ class DashboardScreen extends StatelessWidget {
                 streak: analytics.currentStreak,
                 onSettings: onOpenSettings,
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 18),
               Text(
-                'Keep your body\nin motion.',
-                style: Theme.of(context).textTheme.displaySmall,
+                'Keep your body in motion.',
+                maxLines: 1,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: MoveColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.6,
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 3),
               Text(
                 DateFormat('EEEE, d MMMM').format(DateTime.now()),
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
               _TodayCard(
                 analytics: analytics,
                 stepAnalytics: stepAnalytics,
@@ -73,31 +78,31 @@ class DashboardScreen extends StatelessWidget {
                 syncingSteps: syncingSteps,
               ),
               if (healthStatus == HealthConnectStatus.permissionRequired) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _StepsSetupCard(onConnect: onConnectSteps),
               ],
-              const SizedBox(height: 30),
+              const SizedBox(height: 22),
               const SectionTitle(
                 title: 'This week',
                 subtitle: 'Every logged set keeps the rhythm going',
               ),
-              const SizedBox(height: 13),
+              const SizedBox(height: 10),
               SurfaceCard(
-                padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
                 child: WeekBarChart(days: analytics.lastSevenDays),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 22),
               const SectionTitle(
                 title: 'Quick move',
                 subtitle: 'Your most useful room-friendly movements',
               ),
-              const SizedBox(height: 13),
+              const SizedBox(height: 10),
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final width = (constraints.maxWidth - 12) / 2;
+                  final width = (constraints.maxWidth - 10) / 2;
                   return Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: MovementCatalog.quickMovements.map((movement) {
                       return SizedBox(
                         width: width,
@@ -110,7 +115,7 @@ class DashboardScreen extends StatelessWidget {
                   );
                 },
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 22),
               SectionTitle(
                 title: 'Recent activity',
                 subtitle: recent.isEmpty
@@ -123,11 +128,11 @@ class DashboardScreen extends StatelessWidget {
                         child: const Text('View all'),
                       ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               SurfaceCard(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
+                  horizontal: 14,
+                  vertical: 4,
                 ),
                 child: recent.isEmpty
                     ? const EmptyState(
@@ -253,8 +258,8 @@ class _TodayCard extends StatelessWidget {
             right: -36,
             top: -55,
             child: Container(
-              width: 160,
-              height: 160,
+              width: 140,
+              height: 140,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: MoveColors.primary.withValues(alpha: 0.055),
@@ -262,7 +267,7 @@ class _TodayCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(22),
+            padding: const EdgeInsets.all(18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -288,7 +293,7 @@ class _TodayCard extends StatelessWidget {
                     const Icon(Icons.bolt_rounded, color: MoveColors.primary),
                   ],
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 12),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -296,10 +301,10 @@ class _TodayCard extends StatelessWidget {
                       '$sets',
                       style: Theme.of(
                         context,
-                      ).textTheme.displaySmall?.copyWith(fontSize: 52),
+                      ).textTheme.displaySmall?.copyWith(fontSize: 46),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(left: 8, bottom: 7),
+                      padding: const EdgeInsets.only(left: 7, bottom: 5),
                       child: Text(
                         'set${sets == 1 ? '' : 's'} logged',
                         style: Theme.of(context).textTheme.bodyMedium,
@@ -307,7 +312,7 @@ class _TodayCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -317,7 +322,7 @@ class _TodayCard extends StatelessWidget {
                         label: 'reps',
                       ),
                     ),
-                    Container(width: 1, height: 36, color: MoveColors.border),
+                    Container(width: 1, height: 32, color: MoveColors.border),
                     Expanded(
                       child: _TodayMetric(
                         icon: Icons.timer_outlined,
@@ -325,7 +330,7 @@ class _TodayCard extends StatelessWidget {
                         label: 'duration',
                       ),
                     ),
-                    Container(width: 1, height: 36, color: MoveColors.border),
+                    Container(width: 1, height: 32, color: MoveColors.border),
                     Expanded(
                       child: _TodayMetric(
                         icon: Icons.directions_walk_rounded,
@@ -430,13 +435,13 @@ class _QuickMovementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SurfaceCard(
       onTap: onTap,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              MovementGlyph(movement: movement, size: 40),
+              MovementGlyph(movement: movement, size: 38),
               const Spacer(),
               Icon(
                 Icons.add_circle_outline_rounded,
@@ -445,12 +450,14 @@ class _QuickMovementCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Text(
             movement.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 3),
           Text(

@@ -13,7 +13,7 @@ Future<void> showMoveSettings(BuildContext context) {
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.72),
     builder: (context) => const FractionallySizedBox(
-      heightFactor: 0.82,
+      heightFactor: 0.62,
       child: _MoveSettingsSheet(),
     ),
   );
@@ -121,7 +121,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
               children: [
                 Row(
                   children: [
@@ -137,12 +137,12 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 const SectionTitle(
                   title: 'Daily reminder',
                   subtitle: 'A gentle nudge—not a rigid schedule',
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 SurfaceCard(
                   padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
                   child: SwitchListTile(
@@ -159,19 +159,19 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
                     subtitle: Text(_reminderDescription(reminder)),
                   ),
                 ),
-                const SizedBox(height: 26),
+                const SizedBox(height: 20),
                 const SectionTitle(
                   title: 'Walking & steps',
                   subtitle: 'Read-only through Health Connect',
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 SurfaceCard(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        width: 48,
-                        height: 48,
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
                           color: MoveColors.secondary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(15),
@@ -181,7 +181,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
                           color: MoveColors.secondary,
                         ),
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,7 +195,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
                               _healthDescription(_healthStatus),
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 10),
                             if (_healthStatus ==
                                 HealthConnectStatus.permissionRequired)
                               FilledButton.tonalIcon(
@@ -216,7 +216,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
                 Text(
                   'Move reads only daily step totals. It never writes health '
                   'data, and everything remains on this device.',

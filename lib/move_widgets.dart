@@ -11,7 +11,7 @@ class SurfaceCard extends StatelessWidget {
   const SurfaceCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(18),
+    this.padding = const EdgeInsets.all(16),
     this.onTap,
     this.gradient,
     this.color,
@@ -31,16 +31,16 @@ class SurfaceCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: gradient == null ? (color ?? MoveColors.surface) : null,
         gradient: gradient,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: borderColor ?? MoveColors.border),
       ),
       child: Material(
         color: Colors.transparent,
         clipBehavior: Clip.antiAlias,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
           child: Padding(padding: padding, child: child),
         ),
       ),
@@ -49,7 +49,7 @@ class SurfaceCard extends StatelessWidget {
 }
 
 class MovementGlyph extends StatelessWidget {
-  const MovementGlyph({super.key, required this.movement, this.size = 46});
+  const MovementGlyph({super.key, required this.movement, this.size = 42});
 
   final MovementDefinition movement;
   final double size;
@@ -134,11 +134,11 @@ class LogTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             children: [
-              MovementGlyph(movement: movement, size: 44),
-              const SizedBox(width: 13),
+              MovementGlyph(movement: movement, size: 40),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,7 +187,7 @@ class WeekBarChart extends StatelessWidget {
     );
     final today = DateTime.now();
     return SizedBox(
-      height: 132,
+      height: 108,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: days.map((day) {
@@ -209,10 +209,10 @@ class WeekBarChart extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 4),
                 Container(
-                  height: 78,
-                  width: 22,
+                  height: 62,
+                  width: 20,
                   alignment: Alignment.bottomCenter,
                   decoration: BoxDecoration(
                     color: MoveColors.surfaceHigh,
@@ -221,8 +221,8 @@ class WeekBarChart extends StatelessWidget {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 450),
                     curve: Curves.easeOutCubic,
-                    height: day.sets == 0 ? 5 : math.max(9, 78 * fraction),
-                    width: 22,
+                    height: day.sets == 0 ? 5 : math.max(9, 62 * fraction),
+                    width: 20,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
@@ -238,7 +238,7 @@ class WeekBarChart extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   DateFormat.E().format(day.date).substring(0, 1),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -271,7 +271,7 @@ class StepBarChart extends StatelessWidget {
     final today = DateTime.now();
     final formatter = NumberFormat.compact();
     return SizedBox(
-      height: 132,
+      height: 108,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: days.map((day) {
@@ -293,10 +293,10 @@ class StepBarChart extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 4),
                 Container(
-                  height: 78,
-                  width: 22,
+                  height: 62,
+                  width: 20,
                   alignment: Alignment.bottomCenter,
                   decoration: BoxDecoration(
                     color: MoveColors.surfaceHigh,
@@ -305,8 +305,8 @@ class StepBarChart extends StatelessWidget {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 450),
                     curve: Curves.easeOutCubic,
-                    height: day.steps == 0 ? 5 : math.max(9, 78 * fraction),
-                    width: 22,
+                    height: day.steps == 0 ? 5 : math.max(9, 62 * fraction),
+                    width: 20,
                     decoration: BoxDecoration(
                       color: selected
                           ? MoveColors.primary
@@ -315,7 +315,7 @@ class StepBarChart extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   DateFormat.E().format(day.date).substring(0, 1),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -349,19 +349,19 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 38, horizontal: 28),
+      padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 24),
       child: Column(
         children: [
           Container(
-            width: 66,
-            height: 66,
+            width: 58,
+            height: 58,
             decoration: BoxDecoration(
               color: MoveColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: MoveColors.primary, size: 30),
+            child: Icon(icon, color: MoveColors.primary, size: 27),
           ),
-          const SizedBox(height: 17),
+          const SizedBox(height: 13),
           Text(title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
           Text(

@@ -25,19 +25,19 @@ class ProgressScreen extends StatelessWidget {
     return SafeArea(
       bottom: false,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 22, 20, 120),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 104),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Progress', style: Theme.of(context).textTheme.displaySmall),
-            const SizedBox(height: 7),
+            Text('Progress', style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: 2),
             Text(
               'Consistency over intensity.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             _StreakCard(analytics: analytics),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -47,7 +47,7 @@ class ProgressScreen extends StatelessWidget {
                     icon: Icons.layers_rounded,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: _CompactStat(
                     label: 'ACTIVE DAYS',
@@ -57,24 +57,24 @@ class ProgressScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 22),
             const SectionTitle(
               title: 'Walking',
               subtitle: 'Automatically tracked through Health Connect',
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 10),
             _StepsProgressCard(
               analytics: stepAnalytics,
               connected: steps.isNotEmpty,
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 22),
             const SectionTitle(
               title: 'Weekly pulse',
               subtitle: 'Set count across the last seven days',
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 10),
             SurfaceCard(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
               child: Column(
                 children: [
                   Row(
@@ -87,24 +87,24 @@ class ProgressScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 5),
                   WeekBarChart(days: analytics.lastSevenDays),
                 ],
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 22),
             const SectionTitle(
               title: 'Consistency',
               subtitle: 'Your last 35 days',
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 10),
             SurfaceCard(child: _ConsistencyGrid(analytics: analytics)),
-            const SizedBox(height: 30),
+            const SizedBox(height: 22),
             const SectionTitle(
               title: 'Top movements',
               subtitle: 'Ranked by the number of logged sets',
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 10),
             SurfaceCard(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: summaries.isEmpty
@@ -132,7 +132,7 @@ class _StepsProgressCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final formatter = NumberFormat.decimalPattern();
     return SurfaceCard(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
       child: Column(
         children: [
           Row(
@@ -156,7 +156,7 @@ class _StepsProgressCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           StepBarChart(days: analytics.lastSevenDays),
         ],
       ),
@@ -195,6 +195,7 @@ class _StreakCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SurfaceCard(
+      padding: const EdgeInsets.all(15),
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
@@ -204,8 +205,8 @@ class _StreakCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 62,
-            height: 62,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
               color: MoveColors.primary.withValues(alpha: 0.14),
               shape: BoxShape.circle,
@@ -213,17 +214,19 @@ class _StreakCard extends StatelessWidget {
             child: const Icon(
               Icons.local_fire_department_rounded,
               color: MoveColors.primary,
-              size: 34,
+              size: 30,
             ),
           ),
-          const SizedBox(width: 17),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '${analytics.currentStreak} day${analytics.currentStreak == 1 ? '' : 's'}',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontSize: 26,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -267,7 +270,7 @@ class _CompactStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SurfaceCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       child: Row(
         children: [
           Icon(icon, color: MoveColors.secondary, size: 21),
@@ -356,7 +359,7 @@ class _ConsistencyGrid extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = 7.0;
+        const gap = 6.0;
         final cell = (constraints.maxWidth - (gap * 6)) / 7;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -393,7 +396,7 @@ class _ConsistencyGrid extends StatelessWidget {
                 );
               }).toList(),
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Text('Less', style: Theme.of(context).textTheme.labelSmall),
@@ -450,11 +453,11 @@ class _MovementRank extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 9),
       child: Row(
         children: [
-          MovementGlyph(movement: summary.movement, size: 42),
-          const SizedBox(width: 12),
+          MovementGlyph(movement: summary.movement, size: 38),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -478,7 +481,7 @@ class _MovementRank extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 5),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
