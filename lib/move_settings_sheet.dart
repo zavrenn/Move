@@ -14,7 +14,7 @@ Future<void> showMoveSettings(BuildContext context) {
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.72),
     builder: (context) => const FractionallySizedBox(
-      heightFactor: 0.62,
+      heightFactor: 0.82,
       child: _MoveSettingsSheet(),
     ),
   );
@@ -35,12 +35,16 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
   final _widget = const HomeWidgetService();
 
   HealthConnectStatus? _healthStatus;
+  HealthConnectStatus? _sleepStatus;
   ReminderStatus? _reminderStatus;
   DailyGoalSettings _goals = DailyGoalSettings.standard;
+  SleepScheduleSettings _sleepSchedule = SleepScheduleSettings.standard;
   HomeWidgetStatus? _widgetStatus;
   bool _healthBusy = false;
+  bool _sleepBusy = false;
   bool _reminderBusy = false;
   bool _goalBusy = false;
+  bool _scheduleBusy = false;
   bool _widgetBusy = false;
 
   @override
@@ -65,17 +69,20 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     try {
       final values = await Future.wait<Object>([
         _health.getStatus(),
+        _health.getSleepStatus(),
         _reminders.getStatus(),
         _preferences.getPreferences(),
         _widget.getStatus(),
       ]);
       if (!mounted) return;
-      final preferences = values[2] as MovePreferences;
+      final preferences = values[3] as MovePreferences;
       setState(() {
         _healthStatus = values[0] as HealthConnectStatus;
-        _reminderStatus = values[1] as ReminderStatus;
+        _sleepStatus = values[1] as HealthConnectStatus;
+        _reminderStatus = values[2] as ReminderStatus;
         _goals = preferences.goals;
-        _widgetStatus = values[3] as HomeWidgetStatus;
+        _sleepSchedule = preferences.sleepSchedule;
+        _widgetStatus = values[4] as HomeWidgetStatus;
       });
     } catch (_) {
       if (!mounted) return;
@@ -103,6 +110,20 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
       if (mounted) _showError('Steps access was not enabled.');
     } finally {
       if (mounted) setState(() => _healthBusy = false);
+    }
+  }
+
+  Future<void> _connectSleep() async {
+    setState(() => _sleepBusy = true);
+    try {
+      await _health.requestSleepPermission();
+      final status = await _health.getSleepStatus();
+      if (!mounted) return;
+      setState(() => _sleepStatus = status);
+    } catch (_) {
+      if (mounted) _showError('Sleep access was not enabled.');
+    } finally {
+      if (mounted) setState(() => _sleepBusy = false);
     }
   }
 
@@ -145,6 +166,64 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     } finally {
       if (mounted) setState(() => _goalBusy = false);
     }
+  }
+
+  Future<void> _setSleepSchedule(SleepScheduleSettings next) async {
+    if (_scheduleBusy) return;
+    final previous = _sleepSchedule;
+    setState(() {
+      _scheduleBusy = true;
+      _sleepSchedule = next;
+    });
+    try {
+      final saved = await _preferences.setSleepSchedule(next);
+      if (mounted) setState(() => _sleepSchedule = saved);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _sleepSchedule = previous);
+        _showError('Could not update the sleep window.');
+      }
+    } finally {
+      if (mounted) setState(() => _scheduleBusy = false);
+    }
+  }
+
+  Future<void> _editSleepWindow({required bool bedtime}) async {
+    if (_scheduleBusy) return;
+    final startMinutes = bedtime
+        ? _sleepSchedule.bedtimeStartMinutes
+        : _sleepSchedule.wakeStartMinutes;
+    final endMinutes = bedtime
+        ? _sleepSchedule.bedtimeEndMinutes
+        : _sleepSchedule.wakeEndMinutes;
+    final start = await showTimePicker(
+      context: context,
+      initialTime: _timeOfDay(startMinutes),
+      helpText: bedtime ? 'BEDTIME WINDOW START' : 'WAKE WINDOW START',
+    );
+    if (start == null || !mounted) return;
+    final end = await showTimePicker(
+      context: context,
+      initialTime: _timeOfDay(endMinutes),
+      helpText: bedtime ? 'BEDTIME WINDOW END' : 'WAKE WINDOW END',
+    );
+    if (end == null || !mounted) return;
+    final selectedStartMinutes = _minutesOfDay(start);
+    final selectedEndMinutes = _minutesOfDay(end);
+    if (selectedStartMinutes == selectedEndMinutes) {
+      _showError('Start and end must be different.');
+      return;
+    }
+    final next = bedtime
+        ? _sleepSchedule.copyWith(
+            bedtimeStartMinutes: selectedStartMinutes,
+            bedtimeEndMinutes: selectedEndMinutes,
+          )
+        : _sleepSchedule.copyWith(
+            wakeStartMinutes: selectedStartMinutes,
+            wakeEndMinutes: selectedEndMinutes,
+          );
+    await _setSleepSchedule(next);
   }
 
   Future<void> _pinWidget() async {
@@ -288,6 +367,97 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                 ),
                 const SizedBox(height: 20),
                 const SectionTitle(
+                  title: 'Sleep rhythm',
+                  subtitle:
+                      'Consistency matters; duration does not affect points',
+                ),
+                const SizedBox(height: 10),
+                SurfaceCard(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 10, 6),
+                  child: Column(
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: MoveColors.sleep.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: const Icon(
+                              Icons.bedtime_rounded,
+                              color: MoveColors.sleep,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _sleepTitle(_sleepStatus),
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _sleepDescription(_sleepStatus),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 8),
+                                if (_sleepStatus ==
+                                    HealthConnectStatus.permissionRequired)
+                                  FilledButton.tonalIcon(
+                                    onPressed: _sleepBusy
+                                        ? null
+                                        : _connectSleep,
+                                    icon: const Icon(Icons.link_rounded),
+                                    label: const Text('Connect sleep'),
+                                  )
+                                else if (_sleepStatus ==
+                                    HealthConnectStatus.connected)
+                                  TextButton.icon(
+                                    onPressed: _health.openSettings,
+                                    icon: const Icon(Icons.tune_rounded),
+                                    label: const Text('Manage access'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 18),
+                      _SleepWindowRow(
+                        icon: Icons.bedtime_outlined,
+                        label: 'Bedtime window',
+                        value: _timeRangeLabel(
+                          _sleepSchedule.bedtimeStartMinutes,
+                          _sleepSchedule.bedtimeEndMinutes,
+                        ),
+                        onTap: _scheduleBusy
+                            ? null
+                            : () => _editSleepWindow(bedtime: true),
+                      ),
+                      const Divider(height: 1),
+                      _SleepWindowRow(
+                        icon: Icons.wb_sunny_outlined,
+                        label: 'Wake window',
+                        value: _timeRangeLabel(
+                          _sleepSchedule.wakeStartMinutes,
+                          _sleepSchedule.wakeEndMinutes,
+                        ),
+                        onTap: _scheduleBusy
+                            ? null
+                            : () => _editSleepWindow(bedtime: false),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const SectionTitle(
                   title: 'Walking & steps',
                   subtitle: 'Read-only through Health Connect',
                 ),
@@ -398,8 +568,8 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Move reads only daily step totals. It never writes health '
-                  'data, and everything remains on this device.',
+                  'Move reads daily step totals and sleep timing. It never '
+                  'writes health data, and everything remains on this device.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
@@ -440,6 +610,73 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     HealthConnectStatus.error => 'Try again after reopening Move.',
     null => 'Checking availability and permission status.',
   };
+
+  String _sleepTitle(HealthConnectStatus? status) => switch (status) {
+    null => 'Checking sleep access…',
+    HealthConnectStatus.connected => 'Sleep timing connected',
+    HealthConnectStatus.permissionRequired => 'Connect sleep timing',
+    HealthConnectStatus.updateRequired => 'Health Connect needs an update',
+    HealthConnectStatus.unsupported => 'Sleep timing unavailable',
+    HealthConnectStatus.error => 'Could not check sleep access',
+  };
+
+  String _sleepDescription(HealthConnectStatus? status) => switch (status) {
+    HealthConnectStatus.connected =>
+      'Move reads your main sleep start and wake time.',
+    HealthConnectStatus.permissionRequired =>
+      'Allow read-only access to sleep sessions.',
+    HealthConnectStatus.updateRequired =>
+      'Update Health Connect before linking sleep timing.',
+    HealthConnectStatus.unsupported =>
+      'This device does not currently support Health Connect sleep.',
+    HealthConnectStatus.error => 'Try again after reopening Move.',
+    null => 'Checking availability and permission status.',
+  };
+
+  TimeOfDay _timeOfDay(int minutes) =>
+      TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60);
+
+  int _minutesOfDay(TimeOfDay value) => value.hour * 60 + value.minute;
+
+  String _timeRangeLabel(int startMinutes, int endMinutes) {
+    final localizations = MaterialLocalizations.of(context);
+    final use24Hour = MediaQuery.alwaysUse24HourFormatOf(context);
+    final start = localizations.formatTimeOfDay(
+      _timeOfDay(startMinutes),
+      alwaysUse24HourFormat: use24Hour,
+    );
+    final end = localizations.formatTimeOfDay(
+      _timeOfDay(endMinutes),
+      alwaysUse24HourFormat: use24Hour,
+    );
+    return '$start – $end';
+  }
+}
+
+class _SleepWindowRow extends StatelessWidget {
+  const _SleepWindowRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: onTap,
+      leading: Icon(icon, color: MoveColors.sleep),
+      title: Text(label, style: Theme.of(context).textTheme.titleSmall),
+      subtitle: Text(value),
+      trailing: const Icon(Icons.chevron_right_rounded),
+    );
+  }
 }
 
 class _GoalSettingRow extends StatelessWidget {

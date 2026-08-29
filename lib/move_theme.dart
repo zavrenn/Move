@@ -7,6 +7,7 @@ abstract final class MoveColors {
   static const border = Color(0xFF263029);
   static const primary = Color(0xFFC5F65A);
   static const secondary = Color(0xFF4FE1C1);
+  static const sleep = Color(0xFF9C9CFF);
   static const textPrimary = Color(0xFFF1F5F0);
   static const textSecondary = Color(0xFF9CA89F);
   static const danger = Color(0xFFFF7272);

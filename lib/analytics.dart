@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'models.dart';
 
 class DailyActivity {
@@ -53,13 +55,17 @@ class StepAnalytics {
 
   DateTime get today => DateTime(now.year, now.month, now.day);
 
-  int stepsOn(DateTime date) {
+  DailyStepCount? recordOn(DateTime date) {
     final target = DateTime(date.year, date.month, date.day);
     for (final value in values) {
-      if (value.date == target) return value.steps;
+      if (value.date == target) return value;
     }
-    return 0;
+    return null;
   }
+
+  int? stepsOnOrNull(DateTime date) => recordOn(date)?.steps;
+
+  int stepsOn(DateTime date) => stepsOnOrNull(date) ?? 0;
 
   int get todaySteps => stepsOn(today);
 
@@ -72,6 +78,129 @@ class StepAnalytics {
       lastSevenDays.fold(0, (total, value) => total + value.steps);
 
   int get dailyAverage => (lastSevenTotal / 7).round();
+}
+
+class SleepDayActivity {
+  const SleepDayActivity({
+    required this.record,
+    required this.bedtimeDriftMinutes,
+    required this.wakeDriftMinutes,
+    required this.combinedDriftMinutes,
+    required this.progress,
+  });
+
+  final DailySleepRecord record;
+  final int bedtimeDriftMinutes;
+  final int wakeDriftMinutes;
+  final int combinedDriftMinutes;
+  final double progress;
+}
+
+class SleepAnalytics {
+  SleepAnalytics(this.values, this.schedule, {DateTime? now})
+    : now = now ?? DateTime.now();
+
+  static const maxScoredDriftMinutes = 180;
+
+  final List<DailySleepRecord> values;
+  final SleepScheduleSettings schedule;
+  final DateTime now;
+
+  DateTime get today => DateTime(now.year, now.month, now.day);
+
+  DailySleepRecord? sleepOn(DateTime date) {
+    final target = DateTime(date.year, date.month, date.day);
+    for (final value in values) {
+      if (value.date == target) return value;
+    }
+    return null;
+  }
+
+  SleepDayActivity? activityOn(DateTime date) {
+    final record = sleepOn(date);
+    if (record == null) return null;
+    final bedtimeDrift = schedule.bedtimeDrift(record.sleepStart);
+    final wakeDrift = schedule.wakeDrift(record.sleepEnd);
+    final combined = math
+        .sqrt((bedtimeDrift * bedtimeDrift + wakeDrift * wakeDrift) / 2)
+        .round();
+    return SleepDayActivity(
+      record: record,
+      bedtimeDriftMinutes: bedtimeDrift,
+      wakeDriftMinutes: wakeDrift,
+      combinedDriftMinutes: combined,
+      progress: (1 - combined / maxScoredDriftMinutes).clamp(0.0, 1.0),
+    );
+  }
+
+  SleepDayActivity? get todayActivity => activityOn(today);
+
+  List<SleepDayActivity> get lastSevenRecordedDays {
+    return List.generate(
+      7,
+      (index) => DateTime(today.year, today.month, today.day + index - 6),
+    ).map(activityOn).whereType<SleepDayActivity>().toList();
+  }
+
+  int? get sevenDayAverageDrift {
+    final days = lastSevenRecordedDays;
+    if (days.isEmpty) return null;
+    return (days.fold<int>(0, (sum, day) => sum + day.combinedDriftMinutes) /
+            days.length)
+        .round();
+  }
+}
+
+class RhythmScore {
+  const RhythmScore({
+    required this.movementProgress,
+    required this.stepProgress,
+    required this.sleepProgress,
+  });
+
+  final double movementProgress;
+  final double? stepProgress;
+  final double? sleepProgress;
+
+  int get movementPoints => (30 * movementProgress).round();
+
+  int? get stepPoints =>
+      stepProgress == null ? null : (30 * stepProgress!).round();
+
+  int? get sleepPoints =>
+      sleepProgress == null ? null : (30 * sleepProgress!).round();
+
+  int? get balancePoints => stepProgress == null || sleepProgress == null
+      ? null
+      : (10 *
+                math.min(
+                  movementProgress,
+                  math.min(stepProgress!, sleepProgress!),
+                ))
+            .round();
+
+  int? get total {
+    final steps = stepPoints;
+    final sleep = sleepPoints;
+    final balance = balancePoints;
+    if (steps == null || sleep == null || balance == null) return null;
+    return movementPoints + steps + sleep + balance;
+  }
+
+  factory RhythmScore.calculate({
+    required DateTime date,
+    required MoveAnalytics movements,
+    required StepAnalytics steps,
+    required SleepAnalytics sleep,
+    required DailyGoalSettings goals,
+  }) {
+    final daySteps = steps.stepsOnOrNull(date);
+    return RhythmScore(
+      movementProgress: goals.movementProgress(movements.setsOn(date)),
+      stepProgress: daySteps == null ? null : goals.stepProgress(daySteps),
+      sleepProgress: sleep.activityOn(date)?.progress,
+    );
+  }
 }
 
 class ActivityAnalytics {

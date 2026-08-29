@@ -25,14 +25,14 @@ class PermissionsRationaleActivity : Activity() {
             setBackgroundColor(Color.rgb(8, 11, 10))
         }
         content.addView(TextView(this).apply {
-            text = "Move & your steps"
+            text = "Move & your health data"
             textSize = 28f
             setTextColor(Color.rgb(241, 245, 240))
         })
         content.addView(TextView(this).apply {
-            text = "Move reads only your daily step totals from Health Connect. " +
+            text = "Move reads your daily step totals and sleep timing from Health Connect. " +
                 "It never writes health data or sends it off this device. " +
-                "Daily totals are cached locally for your dashboard and progress views."
+                "Daily totals and sleep rhythm are cached locally for your dashboard and progress views."
             textSize = 17f
             setTextColor(Color.rgb(156, 168, 159))
             setLineSpacing(0f, 1.25f)

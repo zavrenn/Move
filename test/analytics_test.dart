@@ -19,6 +19,19 @@ void main() {
     );
   }
 
+  DailySleepRecord sleepEndingOn(
+    DateTime date, {
+    required DateTime start,
+    required DateTime end,
+  }) {
+    return DailySleepRecord(
+      date: date,
+      sleepStart: start,
+      sleepEnd: end,
+      syncedAt: now,
+    );
+  }
+
   test('current streak includes consecutive days ending today', () {
     final analytics = MoveAnalytics([
       logOn(DateTime(2026, 8, 25, 9)),
@@ -120,5 +133,182 @@ void main() {
     expect(recap.steps, 15500);
     expect(recap.previousSteps, 5000);
     expect(recap.goalDays, 1);
+  });
+
+  test('sleep windows support midnight and measure only outside drift', () {
+    const schedule = SleepScheduleSettings.standard;
+
+    expect(schedule.bedtimeDrift(DateTime(2026, 8, 24, 23, 30)), 0);
+    expect(schedule.bedtimeDrift(DateTime(2026, 8, 25, 0, 0)), 0);
+    expect(schedule.bedtimeDrift(DateTime(2026, 8, 25, 0, 45)), 45);
+    expect(schedule.wakeDrift(DateTime(2026, 8, 25, 7, 30)), 0);
+    expect(schedule.wakeDrift(DateTime(2026, 8, 25, 9, 15)), 75);
+  });
+
+  test('sleep rhythm combines bedtime and wake drift with RMS', () {
+    final analytics = SleepAnalytics(
+      [
+        sleepEndingOn(
+          DateTime(2026, 8, 25),
+          start: DateTime(2026, 8, 25, 1),
+          end: DateTime(2026, 8, 25, 9),
+        ),
+      ],
+      SleepScheduleSettings.standard,
+      now: now,
+    );
+
+    final activity = analytics.todayActivity!;
+    expect(activity.bedtimeDriftMinutes, 60);
+    expect(activity.wakeDriftMinutes, 60);
+    expect(activity.combinedDriftMinutes, 60);
+    expect(activity.progress, closeTo(2 / 3, 0.001));
+  });
+
+  test('rhythm score rewards all three pillars plus balance', () {
+    final movements = MoveAnalytics([
+      logOn(DateTime(2026, 8, 25, 9)),
+      logOn(DateTime(2026, 8, 25, 10)),
+      logOn(DateTime(2026, 8, 25, 11)),
+    ], now: now);
+    final steps = StepAnalytics([
+      DailyStepCount(date: DateTime(2026, 8, 25), steps: 8000, syncedAt: now),
+    ], now: now);
+    final sleep = SleepAnalytics(
+      [
+        sleepEndingOn(
+          DateTime(2026, 8, 25),
+          start: DateTime(2026, 8, 24, 23, 30),
+          end: DateTime(2026, 8, 25, 7, 30),
+        ),
+      ],
+      SleepScheduleSettings.standard,
+      now: now,
+    );
+
+    final score = RhythmScore.calculate(
+      date: DateTime(2026, 8, 25),
+      movements: movements,
+      steps: steps,
+      sleep: sleep,
+      goals: DailyGoalSettings.standard,
+    );
+
+    expect(score.movementPoints, 30);
+    expect(score.stepPoints, 30);
+    expect(score.sleepPoints, 30);
+    expect(score.balancePoints, 10);
+    expect(score.total, 100);
+  });
+
+  test('rhythm score remains incomplete when sleep is missing', () {
+    final movements = MoveAnalytics(const [], now: now);
+    final steps = StepAnalytics([
+      DailyStepCount(date: DateTime(2026, 8, 25), steps: 0, syncedAt: now),
+    ], now: now);
+    final sleep = SleepAnalytics(
+      const [],
+      SleepScheduleSettings.standard,
+      now: now,
+    );
+
+    final score = RhythmScore.calculate(
+      date: DateTime(2026, 8, 25),
+      movements: movements,
+      steps: steps,
+      sleep: sleep,
+      goals: DailyGoalSettings.standard,
+    );
+
+    expect(score.total, isNull);
+    expect(score.stepPoints, 0);
+    expect(score.sleepPoints, isNull);
+  });
+
+  test('rhythm score remains incomplete when today step data is missing', () {
+    final movements = MoveAnalytics(const [], now: now);
+    final steps = StepAnalytics(const [], now: now);
+    final sleep = SleepAnalytics(
+      [
+        sleepEndingOn(
+          DateTime(2026, 8, 25),
+          start: DateTime(2026, 8, 24, 23, 30),
+          end: DateTime(2026, 8, 25, 7, 30),
+        ),
+      ],
+      SleepScheduleSettings.standard,
+      now: now,
+    );
+
+    final score = RhythmScore.calculate(
+      date: DateTime(2026, 8, 25),
+      movements: movements,
+      steps: steps,
+      sleep: sleep,
+      goals: DailyGoalSettings.standard,
+    );
+
+    expect(steps.recordOn(DateTime(2026, 8, 25)), isNull);
+    expect(score.stepPoints, isNull);
+    expect(score.sleepPoints, 30);
+    expect(score.balancePoints, isNull);
+    expect(score.total, isNull);
+  });
+
+  test('an explicit zero step record is valid score data', () {
+    final zero = DailyStepCount(
+      date: DateTime(2026, 8, 25),
+      steps: 0,
+      syncedAt: now,
+    );
+    final steps = StepAnalytics([zero], now: now);
+    final score = RhythmScore.calculate(
+      date: DateTime(2026, 8, 25),
+      movements: MoveAnalytics(const [], now: now),
+      steps: steps,
+      sleep: SleepAnalytics(
+        [
+          sleepEndingOn(
+            DateTime(2026, 8, 25),
+            start: DateTime(2026, 8, 24, 23, 30),
+            end: DateTime(2026, 8, 25, 7, 30),
+          ),
+        ],
+        SleepScheduleSettings.standard,
+        now: now,
+      ),
+      goals: DailyGoalSettings.standard,
+    );
+
+    expect(steps.recordOn(DateTime(2026, 8, 25)), same(zero));
+    expect(score.stepPoints, 0);
+    expect(score.balancePoints, 0);
+    expect(score.total, 30);
+  });
+
+  test('sleep windows require different start and end times', () {
+    expect(SleepScheduleSettings.standard.hasDistinctWindows, isTrue);
+    expect(
+      SleepScheduleSettings.standard
+          .copyWith(bedtimeEndMinutes: 23 * 60)
+          .hasDistinctWindows,
+      isFalse,
+    );
+  });
+
+  test('legacy equal sleep windows fall back to safe defaults', () {
+    final settings = SleepScheduleSettings.fromPlatform({
+      'bedtimeStartMinutes': 60,
+      'bedtimeEndMinutes': 60,
+      'wakeStartMinutes': 390,
+      'wakeEndMinutes': 390,
+    });
+
+    expect(settings, isNotNull);
+    expect(settings.bedtimeStartMinutes, 23 * 60);
+    expect(settings.bedtimeEndMinutes, 0);
+    expect(settings.wakeStartMinutes, 7 * 60);
+    expect(settings.wakeEndMinutes, 8 * 60);
+    expect(settings.hasDistinctWindows, isTrue);
   });
 }

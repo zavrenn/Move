@@ -12,30 +12,44 @@ class DashboardScreen extends StatelessWidget {
     super.key,
     required this.logs,
     required this.steps,
+    required this.sleep,
     required this.goals,
+    required this.sleepSchedule,
     required this.quickMovements,
     required this.healthStatus,
+    required this.sleepStatus,
     required this.syncingSteps,
+    required this.syncingSleep,
+    required this.stepSyncFailed,
+    required this.sleepSyncFailed,
     required this.onLog,
     required this.onEdit,
     required this.onOpenHistory,
     required this.onConnectSteps,
-    required this.onRefreshSteps,
+    required this.onConnectSleep,
+    required this.onRefreshHealthData,
     required this.onOpenSettings,
     required this.onCustomizeQuickMoves,
   });
 
   final List<MovementLog> logs;
   final List<DailyStepCount> steps;
+  final List<DailySleepRecord> sleep;
   final DailyGoalSettings goals;
+  final SleepScheduleSettings sleepSchedule;
   final List<MovementDefinition> quickMovements;
   final HealthConnectStatus? healthStatus;
+  final HealthConnectStatus? sleepStatus;
   final bool syncingSteps;
+  final bool syncingSleep;
+  final bool stepSyncFailed;
+  final bool sleepSyncFailed;
   final ValueChanged<MovementDefinition> onLog;
   final ValueChanged<MovementLog> onEdit;
   final VoidCallback onOpenHistory;
   final Future<void> Function() onConnectSteps;
-  final Future<void> Function() onRefreshSteps;
+  final Future<void> Function() onConnectSleep;
+  final Future<void> Function() onRefreshHealthData;
   final VoidCallback onOpenSettings;
   final VoidCallback onCustomizeQuickMoves;
 
@@ -43,16 +57,24 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final analytics = MoveAnalytics(logs);
     final stepAnalytics = StepAnalytics(steps);
+    final sleepAnalytics = SleepAnalytics(sleep, sleepSchedule);
     final activity = ActivityAnalytics(
       movements: analytics,
       steps: stepAnalytics,
+    );
+    final rhythmScore = RhythmScore.calculate(
+      date: analytics.today,
+      movements: analytics,
+      steps: stepAnalytics,
+      sleep: sleepAnalytics,
+      goals: goals,
     );
     final recent = logs.take(3).toList();
 
     return SafeArea(
       bottom: false,
       child: RefreshIndicator(
-        onRefresh: onRefreshSteps,
+        onRefresh: onRefreshHealthData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 104),
@@ -79,6 +101,19 @@ class DashboardScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 18),
+              _RhythmScoreCard(
+                score: rhythmScore,
+                sleepActivity: sleepAnalytics.todayActivity,
+                stepStatus: healthStatus,
+                sleepStatus: sleepStatus,
+                syncingSteps: syncingSteps,
+                syncingSleep: syncingSleep,
+                stepSyncFailed: stepSyncFailed,
+                sleepSyncFailed: sleepSyncFailed,
+                onConnectSteps: onConnectSteps,
+                onConnectSleep: onConnectSleep,
+              ),
+              const SizedBox(height: 10),
               _TodayCard(
                 analytics: analytics,
                 stepAnalytics: stepAnalytics,
@@ -243,6 +278,304 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
+class _RhythmScoreCard extends StatelessWidget {
+  const _RhythmScoreCard({
+    required this.score,
+    required this.sleepActivity,
+    required this.stepStatus,
+    required this.sleepStatus,
+    required this.syncingSteps,
+    required this.syncingSleep,
+    required this.stepSyncFailed,
+    required this.sleepSyncFailed,
+    required this.onConnectSteps,
+    required this.onConnectSleep,
+  });
+
+  final RhythmScore score;
+  final SleepDayActivity? sleepActivity;
+  final HealthConnectStatus? stepStatus;
+  final HealthConnectStatus? sleepStatus;
+  final bool syncingSteps;
+  final bool syncingSleep;
+  final bool stepSyncFailed;
+  final bool sleepSyncFailed;
+  final Future<void> Function() onConnectSteps;
+  final Future<void> Function() onConnectSleep;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = score.total;
+    final sleep = sleepActivity;
+    final missingSteps = score.stepProgress == null;
+    final missingSleep = score.sleepProgress == null;
+    final syncing = syncingSteps || syncingSleep;
+    final missingMessage = _missingMessage(
+      missingSteps: missingSteps,
+      missingSleep: missingSleep,
+    );
+
+    return SurfaceCard(
+      padding: const EdgeInsets.all(17),
+      borderColor: MoveColors.primary.withValues(alpha: 0.25),
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF202D1C), Color(0xFF10201B)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'RHYTHM SCORE',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: MoveColors.primary,
+                  letterSpacing: 1.4,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              if (syncing)
+                const SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                const Icon(
+                  Icons.auto_graph_rounded,
+                  color: MoveColors.primary,
+                  size: 20,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                total == null ? '—' : '$total',
+                style: Theme.of(
+                  context,
+                ).textTheme.displaySmall?.copyWith(fontSize: 44),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 7, bottom: 5),
+                child: Text(
+                  total == null
+                      ? _waitingLabel(
+                          missingSteps: missingSteps,
+                          missingSleep: missingSleep,
+                        )
+                      : 'out of 100',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _RhythmMetric(
+                  label: 'MOVES',
+                  points: score.movementPoints,
+                  color: MoveColors.primary,
+                ),
+              ),
+              Container(width: 1, height: 34, color: MoveColors.border),
+              Expanded(
+                child: _RhythmMetric(
+                  label: 'STEPS',
+                  points: score.stepPoints,
+                  color: MoveColors.secondary,
+                ),
+              ),
+              Container(width: 1, height: 34, color: MoveColors.border),
+              Expanded(
+                child: _RhythmMetric(
+                  label: 'SLEEP',
+                  points: score.sleepPoints,
+                  color: MoveColors.sleep,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (total == null) ...[
+            Text(missingMessage, style: Theme.of(context).textTheme.bodySmall),
+            if ((missingSteps &&
+                    stepStatus == HealthConnectStatus.permissionRequired) ||
+                (missingSleep &&
+                    sleepStatus == HealthConnectStatus.permissionRequired)) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (missingSteps &&
+                      stepStatus == HealthConnectStatus.permissionRequired)
+                    FilledButton.tonalIcon(
+                      onPressed: syncingSteps ? null : () => onConnectSteps(),
+                      icon: const Icon(Icons.directions_walk_rounded),
+                      label: const Text('Connect steps'),
+                    ),
+                  if (missingSleep &&
+                      sleepStatus == HealthConnectStatus.permissionRequired)
+                    FilledButton.tonalIcon(
+                      onPressed: syncingSleep ? null : () => onConnectSleep(),
+                      icon: const Icon(Icons.bedtime_rounded),
+                      label: const Text('Connect sleep'),
+                    ),
+                ],
+              ),
+            ],
+          ] else ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.bedtime_rounded,
+                  size: 16,
+                  color: MoveColors.sleep,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    sleep!.combinedDriftMinutes == 0
+                        ? 'Sleep timing inside both target windows'
+                        : '${formatCompactDuration(sleep.combinedDriftMinutes * 60)} sleep drift',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                Text(
+                  '+${score.balancePoints} balance',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: MoveColors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (sleepSyncFailed && sleep != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Sleep refresh failed · showing cached timing',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: MoveColors.danger),
+            ),
+          ],
+          if (stepSyncFailed && score.stepProgress != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Steps refresh failed · showing cached total',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: MoveColors.danger),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _waitingLabel({
+    required bool missingSteps,
+    required bool missingSleep,
+  }) {
+    if (missingSteps && missingSleep) return 'waiting for health data';
+    if (missingSteps) return 'waiting for steps';
+    return 'waiting for sleep';
+  }
+
+  String _missingMessage({
+    required bool missingSteps,
+    required bool missingSleep,
+  }) {
+    if (missingSteps && missingSleep) {
+      if (stepSyncFailed && sleepSyncFailed) {
+        return 'Steps and sleep timing could not be refreshed.';
+      }
+      if (sleepSyncFailed) {
+        return 'Today’s steps are missing, and sleep timing could not be refreshed.';
+      }
+      if (stepSyncFailed) {
+        return 'Daily steps could not be refreshed; waiting for sleep timing.';
+      }
+      if (stepStatus == HealthConnectStatus.permissionRequired &&
+          sleepStatus == HealthConnectStatus.permissionRequired) {
+        return 'Connect steps and sleep timing to complete today’s score.';
+      }
+      return 'Waiting for today’s steps and sleep timing.';
+    }
+    if (missingSteps) {
+      if (stepSyncFailed) {
+        return 'Daily steps could not be refreshed. Pull to try again.';
+      }
+      return switch (stepStatus) {
+        null => 'Checking today’s step total…',
+        HealthConnectStatus.connected =>
+          syncingSteps
+              ? 'Refreshing today’s step total…'
+              : 'No step total found for today. Pull to refresh.',
+        HealthConnectStatus.permissionRequired =>
+          'Connect daily steps to complete today’s score.',
+        HealthConnectStatus.updateRequired =>
+          'Health Connect needs an update before steps can sync.',
+        HealthConnectStatus.unsupported =>
+          'Daily steps are unavailable on this device.',
+        HealthConnectStatus.error => 'Daily steps could not be refreshed.',
+      };
+    }
+    if (sleepSyncFailed) {
+      return 'Sleep timing could not be refreshed. Pull to try again.';
+    }
+    return switch (sleepStatus) {
+      null => 'Checking last night’s sleep rhythm…',
+      HealthConnectStatus.connected =>
+        syncingSleep
+            ? 'Refreshing last night’s sleep rhythm…'
+            : 'No main sleep session found for today.',
+      HealthConnectStatus.permissionRequired =>
+        'Connect sleep timing to complete today’s score.',
+      HealthConnectStatus.updateRequired =>
+        'Health Connect needs an update before sleep can sync.',
+      HealthConnectStatus.unsupported =>
+        'Sleep timing is unavailable on this device.',
+      HealthConnectStatus.error => 'Sleep timing could not be refreshed.',
+    };
+  }
+}
+
+class _RhythmMetric extends StatelessWidget {
+  const _RhythmMetric({
+    required this.label,
+    required this.points,
+    required this.color,
+  });
+
+  final String label;
+  final int? points;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          points == null ? '— / 30' : '$points / 30',
+          style: TextStyle(color: color, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
+      ],
+    );
+  }
+}
+
 class _TodayCard extends StatelessWidget {
   const _TodayCard({
     required this.analytics,
@@ -291,7 +624,7 @@ class _TodayCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      'TODAY’S RHYTHM',
+                      'TODAY’S ACTIVITY',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: MoveColors.primary,
                         letterSpacing: 1.4,

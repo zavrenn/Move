@@ -455,6 +455,150 @@ class DailyStepCount {
   }
 }
 
+class DailySleepRecord {
+  const DailySleepRecord({
+    required this.date,
+    required this.sleepStart,
+    required this.sleepEnd,
+    required this.syncedAt,
+  });
+
+  final DateTime date;
+  final DateTime sleepStart;
+  final DateTime sleepEnd;
+  final DateTime syncedAt;
+
+  int get dateKey => date.year * 10000 + date.month * 100 + date.day;
+
+  Map<String, Object?> toDatabaseMap() => {
+    'date_key': dateKey,
+    'sleep_start': sleepStart.millisecondsSinceEpoch,
+    'sleep_end': sleepEnd.millisecondsSinceEpoch,
+    'synced_at': syncedAt.millisecondsSinceEpoch,
+  };
+
+  factory DailySleepRecord.fromDatabase(Map<String, Object?> map) {
+    final key = map['date_key'] as int;
+    return DailySleepRecord(
+      date: DateTime(key ~/ 10000, (key ~/ 100) % 100, key % 100),
+      sleepStart: DateTime.fromMillisecondsSinceEpoch(
+        map['sleep_start'] as int,
+      ),
+      sleepEnd: DateTime.fromMillisecondsSinceEpoch(map['sleep_end'] as int),
+      syncedAt: DateTime.fromMillisecondsSinceEpoch(map['synced_at'] as int),
+    );
+  }
+
+  factory DailySleepRecord.fromPlatform(Map<Object?, Object?> map) {
+    final parts = (map['date'] as String).split('-').map(int.parse).toList();
+    return DailySleepRecord(
+      date: DateTime(parts[0], parts[1], parts[2]),
+      sleepStart: DateTime.fromMillisecondsSinceEpoch(
+        (map['sleepStart'] as num).toInt(),
+      ),
+      sleepEnd: DateTime.fromMillisecondsSinceEpoch(
+        (map['sleepEnd'] as num).toInt(),
+      ),
+      syncedAt: DateTime.now(),
+    );
+  }
+}
+
+class SleepScheduleSettings {
+  const SleepScheduleSettings({
+    required this.bedtimeStartMinutes,
+    required this.bedtimeEndMinutes,
+    required this.wakeStartMinutes,
+    required this.wakeEndMinutes,
+  });
+
+  static const standard = SleepScheduleSettings(
+    bedtimeStartMinutes: 23 * 60,
+    bedtimeEndMinutes: 0,
+    wakeStartMinutes: 7 * 60,
+    wakeEndMinutes: 8 * 60,
+  );
+
+  final int bedtimeStartMinutes;
+  final int bedtimeEndMinutes;
+  final int wakeStartMinutes;
+  final int wakeEndMinutes;
+
+  bool get hasDistinctWindows =>
+      bedtimeStartMinutes != bedtimeEndMinutes &&
+      wakeStartMinutes != wakeEndMinutes;
+
+  int bedtimeDrift(DateTime value) => _windowDrift(
+    _minutesOfDay(value),
+    bedtimeStartMinutes,
+    bedtimeEndMinutes,
+  );
+
+  int wakeDrift(DateTime value) =>
+      _windowDrift(_minutesOfDay(value), wakeStartMinutes, wakeEndMinutes);
+
+  SleepScheduleSettings copyWith({
+    int? bedtimeStartMinutes,
+    int? bedtimeEndMinutes,
+    int? wakeStartMinutes,
+    int? wakeEndMinutes,
+  }) {
+    return SleepScheduleSettings(
+      bedtimeStartMinutes: bedtimeStartMinutes ?? this.bedtimeStartMinutes,
+      bedtimeEndMinutes: bedtimeEndMinutes ?? this.bedtimeEndMinutes,
+      wakeStartMinutes: wakeStartMinutes ?? this.wakeStartMinutes,
+      wakeEndMinutes: wakeEndMinutes ?? this.wakeEndMinutes,
+    );
+  }
+
+  factory SleepScheduleSettings.fromPlatform(Map<Object?, Object?> map) {
+    int value(String key, int fallback) =>
+        ((map[key] as num?)?.toInt() ?? fallback).clamp(0, 1439).toInt();
+
+    final bedtimeStart = value(
+      'bedtimeStartMinutes',
+      standard.bedtimeStartMinutes,
+    );
+    final bedtimeEnd = value('bedtimeEndMinutes', standard.bedtimeEndMinutes);
+    final wakeStart = value('wakeStartMinutes', standard.wakeStartMinutes);
+    final wakeEnd = value('wakeEndMinutes', standard.wakeEndMinutes);
+    final invalidBedtimeWindow = bedtimeStart == bedtimeEnd;
+    final invalidWakeWindow = wakeStart == wakeEnd;
+
+    return SleepScheduleSettings(
+      bedtimeStartMinutes: invalidBedtimeWindow
+          ? standard.bedtimeStartMinutes
+          : bedtimeStart,
+      bedtimeEndMinutes: invalidBedtimeWindow
+          ? standard.bedtimeEndMinutes
+          : bedtimeEnd,
+      wakeStartMinutes: invalidWakeWindow
+          ? standard.wakeStartMinutes
+          : wakeStart,
+      wakeEndMinutes: invalidWakeWindow ? standard.wakeEndMinutes : wakeEnd,
+    );
+  }
+
+  static int _minutesOfDay(DateTime value) => value.hour * 60 + value.minute;
+
+  static int _windowDrift(int value, int start, int end) {
+    final inside = start < end
+        ? value >= start && value <= end
+        : start > end
+        ? value >= start || value <= end
+        : value == start;
+    if (inside) return 0;
+    return _circularDistance(value, start) < _circularDistance(value, end)
+        ? _circularDistance(value, start)
+        : _circularDistance(value, end);
+  }
+
+  static int _circularDistance(int first, int second) {
+    final difference = (first - second).abs();
+    return difference < 1440 - difference ? difference : 1440 - difference;
+  }
+}
+
 class DailyGoalSettings {
   const DailyGoalSettings({required this.stepGoal, required this.movementGoal});
 

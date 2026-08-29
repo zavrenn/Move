@@ -9,14 +9,17 @@ import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
@@ -36,12 +39,14 @@ class MainActivity : FlutterActivity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val stepsPermission =
         HealthPermission.getReadPermission(StepsRecord::class)
-    private val healthPermissions = setOf(stepsPermission)
+    private val sleepPermission =
+        HealthPermission.getReadPermission(SleepSessionRecord::class)
     private val healthPermissionContract by lazy {
         PermissionController.createRequestPermissionResultContract()
     }
 
     private var pendingHealthPermissionResult: MethodChannel.Result? = null
+    private var pendingHealthPermissions: Set<String>? = null
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -58,6 +63,9 @@ class MainActivity : FlutterActivity() {
             "healthStatus" -> healthStatus(result)
             "requestStepsPermission" -> requestStepsPermission(result)
             "readDailySteps" -> readDailySteps(call, result)
+            "sleepStatus" -> sleepStatus(result)
+            "requestSleepPermission" -> requestSleepPermission(result)
+            "readDailySleep" -> readDailySleep(call, result)
             "openHealthConnect" -> openHealthConnect(result)
             "reminderStatus" -> result.success(ReminderScheduler.status(this))
             "requestNotificationPermission" -> requestNotificationPermission(result)
@@ -65,6 +73,7 @@ class MainActivity : FlutterActivity() {
             "appPreferences" -> result.success(MoveStateStore.preferencesMap(this))
             "setDailyGoals" -> setDailyGoals(call, result)
             "setQuickMovementIds" -> setQuickMovementIds(call, result)
+            "setSleepSchedule" -> setSleepSchedule(call, result)
             "updateMoveSnapshot" -> updateMoveSnapshot(call, result)
             "homeWidgetStatus" -> homeWidgetStatus(result)
             "pinHomeWidget" -> pinHomeWidget(result)
@@ -73,13 +82,21 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun healthStatus(result: MethodChannel.Result) {
+        permissionStatus(stepsPermission, result)
+    }
+
+    private fun sleepStatus(result: MethodChannel.Result) {
+        permissionStatus(sleepPermission, result)
+    }
+
+    private fun permissionStatus(permission: String, result: MethodChannel.Result) {
         when (HealthConnectClient.getSdkStatus(this)) {
             HealthConnectClient.SDK_AVAILABLE -> activityScope.launch {
                 try {
                     val granted = healthClient()
                         .permissionController
                         .getGrantedPermissions()
-                        .contains(stepsPermission)
+                        .contains(permission)
                     result.success(if (granted) "connected" else "permissionRequired")
                 } catch (error: Exception) {
                     result.error("health_status_failed", error.message, null)
@@ -92,6 +109,17 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun requestStepsPermission(result: MethodChannel.Result) {
+        requestHealthPermissions(setOf(stepsPermission), result)
+    }
+
+    private fun requestSleepPermission(result: MethodChannel.Result) {
+        requestHealthPermissions(setOf(sleepPermission), result)
+    }
+
+    private fun requestHealthPermissions(
+        permissions: Set<String>,
+        result: MethodChannel.Result,
+    ) {
         if (HealthConnectClient.getSdkStatus(this) != HealthConnectClient.SDK_AVAILABLE) {
             result.error("health_unavailable", "Health Connect is unavailable.", null)
             return
@@ -104,25 +132,27 @@ class MainActivity : FlutterActivity() {
         activityScope.launch {
             try {
                 val granted = healthClient().permissionController.getGrantedPermissions()
-                if (granted.containsAll(healthPermissions)) {
+                if (granted.containsAll(permissions)) {
                     result.success(true)
                     return@launch
                 }
                 pendingHealthPermissionResult = result
+                pendingHealthPermissions = permissions
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     requestPermissions(
-                        healthPermissions.toTypedArray(),
+                        permissions.toTypedArray(),
                         REQUEST_HEALTH_PERMISSIONS,
                     )
                 } else {
                     val intent = healthPermissionContract.createIntent(
                         this@MainActivity,
-                        healthPermissions,
+                        permissions,
                     )
                     startActivityForResult(intent, REQUEST_HEALTH_PERMISSIONS)
                 }
             } catch (error: Exception) {
                 pendingHealthPermissionResult = null
+                pendingHealthPermissions = null
                 result.error("health_permission_failed", error.message, null)
             }
         }
@@ -170,6 +200,109 @@ class MainActivity : FlutterActivity() {
                 result.error("health_permission_required", error.message, null)
             } catch (error: Exception) {
                 result.error("health_read_failed", error.message, null)
+            }
+        }
+    }
+
+    private data class SleepCandidate(
+        val date: LocalDate,
+        val sleepStart: Long,
+        val sleepEnd: Long,
+        val asleepMinutes: Int,
+        val sourcePackage: String,
+    )
+
+    private fun readDailySleep(call: MethodCall, result: MethodChannel.Result) {
+        val days = (call.argument<Int>("days") ?: 14).coerceIn(1, 30)
+        if (HealthConnectClient.getSdkStatus(this) != HealthConnectClient.SDK_AVAILABLE) {
+            result.error("health_unavailable", "Health Connect is unavailable.", null)
+            return
+        }
+
+        activityScope.launch {
+            try {
+                val client = healthClient()
+                val granted = client.permissionController.getGrantedPermissions()
+                if (!granted.contains(sleepPermission)) {
+                    result.error("health_permission_required", "Sleep permission is required.", null)
+                    return@launch
+                }
+
+                val zone = ZoneId.systemDefault()
+                val today = LocalDate.now(zone)
+                val firstDate = today.minusDays((days - 1).toLong())
+                val records = mutableListOf<SleepSessionRecord>()
+                var pageToken: String? = null
+                do {
+                    val response = client.readRecords(
+                        ReadRecordsRequest(
+                            recordType = SleepSessionRecord::class,
+                            timeRangeFilter = TimeRangeFilter.between(
+                                firstDate.minusDays(1).atStartOfDay(zone).toInstant(),
+                                today.plusDays(1).atStartOfDay(zone).toInstant(),
+                            ),
+                            pageToken = pageToken,
+                        ),
+                    )
+                    records.addAll(response.records)
+                    pageToken = response.pageToken
+                } while (pageToken != null)
+
+                val candidates = records.mapNotNull { record ->
+                    val sleepingStages = record.stages.filter { stage ->
+                        stage.stage == SleepSessionRecord.STAGE_TYPE_SLEEPING ||
+                            stage.stage == SleepSessionRecord.STAGE_TYPE_LIGHT ||
+                            stage.stage == SleepSessionRecord.STAGE_TYPE_DEEP ||
+                            stage.stage == SleepSessionRecord.STAGE_TYPE_REM
+                    }
+                    val sleepStart = sleepingStages.minOfOrNull { it.startTime }
+                        ?: record.startTime
+                    val sleepEnd = sleepingStages.maxOfOrNull { it.endTime }
+                        ?: record.endTime
+                    val wakeDate = sleepEnd.atZone(zone).toLocalDate()
+                    if (wakeDate.isBefore(firstDate) || wakeDate.isAfter(today)) {
+                        return@mapNotNull null
+                    }
+                    val asleepMinutes = if (sleepingStages.isEmpty()) {
+                        Duration.between(sleepStart, sleepEnd).toMinutes()
+                    } else {
+                        sleepingStages.sumOf {
+                            Duration.between(it.startTime, it.endTime).toMinutes()
+                        }
+                    }.coerceIn(0L, 1440L).toInt()
+                    SleepCandidate(
+                        date = wakeDate,
+                        sleepStart = sleepStart.toEpochMilli(),
+                        sleepEnd = sleepEnd.toEpochMilli(),
+                        asleepMinutes = asleepMinutes,
+                        sourcePackage = record.metadata.dataOrigin.packageName,
+                    )
+                }
+
+                val values = candidates.groupBy { it.date }.mapNotNull { (date, records) ->
+                    val samsungRecords = records.filter {
+                        it.sourcePackage == SAMSUNG_HEALTH_PACKAGE
+                    }
+                    val selected = (samsungRecords.ifEmpty { records })
+                        .maxByOrNull { it.asleepMinutes }
+                        ?: return@mapNotNull null
+                    mapOf(
+                        "date" to date.toString(),
+                        "sleepStart" to selected.sleepStart,
+                        "sleepEnd" to selected.sleepEnd,
+                    )
+                }.sortedBy { it["date"] as String }
+                result.success(
+                    mapOf(
+                        "startDate" to firstDate.toString(),
+                        "endDate" to today.toString(),
+                        "records" to values,
+                    ),
+                )
+            } catch (error: SecurityException) {
+                result.error("health_permission_required", error.message, null)
+            } catch (error: Exception) {
+                result.error("health_sleep_read_failed", error.message, null)
             }
         }
     }
@@ -234,6 +367,34 @@ class MainActivity : FlutterActivity() {
         result.success(null)
     }
 
+    private fun setSleepSchedule(call: MethodCall, result: MethodChannel.Result) {
+        val bedtimeStart = call.argument<Int>("bedtimeStartMinutes")
+            ?.coerceIn(0, 1439) ?: MoveStateStore.DEFAULT_BEDTIME_START_MINUTES
+        val bedtimeEnd = call.argument<Int>("bedtimeEndMinutes")
+            ?.coerceIn(0, 1439) ?: MoveStateStore.DEFAULT_BEDTIME_END_MINUTES
+        val wakeStart = call.argument<Int>("wakeStartMinutes")
+            ?.coerceIn(0, 1439) ?: MoveStateStore.DEFAULT_WAKE_START_MINUTES
+        val wakeEnd = call.argument<Int>("wakeEndMinutes")
+            ?.coerceIn(0, 1439) ?: MoveStateStore.DEFAULT_WAKE_END_MINUTES
+        if (bedtimeStart == bedtimeEnd || wakeStart == wakeEnd) {
+            result.error(
+                "invalid_sleep_schedule",
+                "Sleep window start and end must be different.",
+                null,
+            )
+            return
+        }
+        result.success(
+            MoveStateStore.setSleepSchedule(
+                context = this,
+                bedtimeStartMinutes = bedtimeStart,
+                bedtimeEndMinutes = bedtimeEnd,
+                wakeStartMinutes = wakeStart,
+                wakeEndMinutes = wakeEnd,
+            ),
+        )
+    }
+
     private fun updateMoveSnapshot(call: MethodCall, result: MethodChannel.Result) {
         val date = call.argument<String>("date")
         if (date.isNullOrBlank()) {
@@ -274,8 +435,11 @@ class MainActivity : FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == REQUEST_HEALTH_PERMISSIONS) {
             val granted = healthPermissionContract.parseResult(resultCode, data)
-            pendingHealthPermissionResult?.success(granted.containsAll(healthPermissions))
+            pendingHealthPermissionResult?.success(
+                granted.containsAll(pendingHealthPermissions.orEmpty()),
+            )
             pendingHealthPermissionResult = null
+            pendingHealthPermissions = null
             return
         }
         super.onActivityResult(requestCode, resultCode, data)
@@ -287,11 +451,12 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         if (requestCode == REQUEST_HEALTH_PERMISSIONS) {
-            val granted = healthPermissions.all {
+            val granted = pendingHealthPermissions.orEmpty().all {
                 checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
             }
             pendingHealthPermissionResult?.success(granted)
             pendingHealthPermissionResult = null
+            pendingHealthPermissions = null
             return
         }
         if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
@@ -307,6 +472,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         pendingHealthPermissionResult?.error("activity_destroyed", "Permission request closed.", null)
+        pendingHealthPermissions = null
         pendingNotificationPermissionResult?.error(
             "activity_destroyed",
             "Permission request closed.",

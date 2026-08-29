@@ -39,6 +39,28 @@ class HealthConnectService {
     return await _channel.invokeMethod<bool>('requestStepsPermission') ?? false;
   }
 
+  Future<HealthConnectStatus> getSleepStatus() async {
+    if (!Platform.isAndroid) return HealthConnectStatus.unsupported;
+    try {
+      final value = await _channel.invokeMethod<String>('sleepStatus');
+      return switch (value) {
+        'connected' => HealthConnectStatus.connected,
+        'permissionRequired' => HealthConnectStatus.permissionRequired,
+        'updateRequired' => HealthConnectStatus.updateRequired,
+        'unsupported' => HealthConnectStatus.unsupported,
+        _ => HealthConnectStatus.error,
+      };
+    } on PlatformException {
+      return HealthConnectStatus.error;
+    } on MissingPluginException {
+      return HealthConnectStatus.unsupported;
+    }
+  }
+
+  Future<bool> requestSleepPermission() async {
+    return await _channel.invokeMethod<bool>('requestSleepPermission') ?? false;
+  }
+
   Future<List<DailyStepCount>> readDailySteps({int days = 14}) async {
     final values = await _channel.invokeListMethod<Object?>('readDailySteps', {
       'days': days,
@@ -51,7 +73,52 @@ class HealthConnectService {
         .toList();
   }
 
+  Future<DailySleepSync> readDailySleep({int days = 14}) async {
+    final value = await _channel.invokeMapMethod<Object?, Object?>(
+      'readDailySleep',
+      {'days': days},
+    );
+    if (value == null) {
+      throw StateError('Health Connect returned no sleep data.');
+    }
+    return DailySleepSync.fromPlatform(value);
+  }
+
   Future<void> openSettings() => _channel.invokeMethod('openHealthConnect');
+}
+
+class DailySleepSync {
+  const DailySleepSync({
+    required this.startDate,
+    required this.endDate,
+    required this.records,
+  });
+
+  final DateTime startDate;
+  final DateTime endDate;
+  final List<DailySleepRecord> records;
+
+  factory DailySleepSync.fromPlatform(Map<Object?, Object?> map) {
+    DateTime parseDate(Object? value) {
+      final parts = (value as String).split('-').map(int.parse).toList();
+      return DateTime(parts[0], parts[1], parts[2]);
+    }
+
+    final rawRecords = map['records'];
+    if (rawRecords is! List<Object?>) {
+      throw const FormatException('Sleep sync records are missing.');
+    }
+    return DailySleepSync(
+      startDate: parseDate(map['startDate']),
+      endDate: parseDate(map['endDate']),
+      records: rawRecords
+          .map(
+            (value) =>
+                DailySleepRecord.fromPlatform(value! as Map<Object?, Object?>),
+          )
+          .toList(),
+    );
+  }
 }
 
 class ReminderStatus {
@@ -108,10 +175,15 @@ class ReminderService {
 }
 
 class MovePreferences {
-  const MovePreferences({required this.goals, required this.quickMovementIds});
+  const MovePreferences({
+    required this.goals,
+    required this.quickMovementIds,
+    required this.sleepSchedule,
+  });
 
   final DailyGoalSettings goals;
   final List<String> quickMovementIds;
+  final SleepScheduleSettings sleepSchedule;
 
   factory MovePreferences.fromPlatform(Map<Object?, Object?> map) {
     final rawIds = (map['quickMovementIds'] as List<Object?>? ?? const [])
@@ -128,6 +200,7 @@ class MovePreferences {
       quickMovementIds: validIds.length >= 2
           ? validIds.take(8).toList()
           : List.of(MovementCatalog.quickIds),
+      sleepSchedule: SleepScheduleSettings.fromPlatform(map),
     );
   }
 }
@@ -142,6 +215,7 @@ class MovePreferencesService {
       return MovePreferences(
         goals: DailyGoalSettings.standard,
         quickMovementIds: List.of(MovementCatalog.quickIds),
+        sleepSchedule: SleepScheduleSettings.standard,
       );
     }
     final value = await _channel.invokeMapMethod<Object?, Object?>(
@@ -160,6 +234,19 @@ class MovePreferencesService {
 
   Future<void> setQuickMovementIds(List<String> ids) {
     return _channel.invokeMethod<void>('setQuickMovementIds', {'ids': ids});
+  }
+
+  Future<SleepScheduleSettings> setSleepSchedule(
+    SleepScheduleSettings schedule,
+  ) async {
+    final value = await _channel
+        .invokeMapMethod<Object?, Object?>('setSleepSchedule', {
+          'bedtimeStartMinutes': schedule.bedtimeStartMinutes,
+          'bedtimeEndMinutes': schedule.bedtimeEndMinutes,
+          'wakeStartMinutes': schedule.wakeStartMinutes,
+          'wakeEndMinutes': schedule.wakeEndMinutes,
+        });
+    return SleepScheduleSettings.fromPlatform(value ?? const {});
   }
 
   Future<void> updateSnapshot({

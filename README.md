@@ -10,7 +10,7 @@
 
 ## About
 
-Move makes it fast to record small bursts of activity without accounts or subscriptions. Log repetitions such as squats and push-ups, track timed movements such as planks and stretches, and bring in daily steps through read-only Health Connect access. Activity history and preferences stay on the device.
+Move makes it fast to record small bursts of activity without accounts or subscriptions. Log repetitions such as squats and push-ups, track timed movements such as planks and stretches, and bring in daily steps and sleep timing through read-only Health Connect access. Activity history and preferences stay on the device.
 
 ## Features
 
@@ -19,7 +19,9 @@ Move makes it fast to record small bursts of activity without accounts or subscr
 - Left, right, and both-side tracking where useful
 - Optional notes plus log editing and deletion
 - Read-only daily steps through Android Health Connect, including Samsung Health
+- Read-only sleep timing with customizable bedtime and wake windows
 - Independent daily movement and step goals
+- Explainable 100-point Rhythm Score across moves, steps, sleep consistency, and balance
 - One optional, progress-aware reminder at a random time from 5 AM to 11 PM
 - Customizable Quick Moves with add, remove, and drag ordering
 - Weekly recaps, unified active-day streaks, and a 35-day consistency view
@@ -33,7 +35,7 @@ Accounts and cloud synchronization are intentionally outside the current scope.
 
 ## Download
 
-Download the latest Android APK from [GitHub Releases](https://github.com/zavrenn/Move/releases/latest). Move supports Android 8.0 and newer; automatic step tracking requires Health Connect.
+Download the latest Android APK from [GitHub Releases](https://github.com/zavrenn/Move/releases/latest). Move supports Android 8.0 and newer; automatic step and sleep tracking require Health Connect.
 
 ## Run locally
 
@@ -85,7 +87,7 @@ android/app/src/main/kotlin/com/med/move/
 
 Move does not request network access or collect personal data. Movement logs are stored only in the app's local SQLite database. Removing the app also removes its local data unless Android restores it from a device backup.
 
-When enabled, Move reads only daily step totals from Health Connect and caches them locally for dashboard and progress metrics. It never writes health data. Goals, reminders, Quick Moves, and widget state remain entirely on-device.
+When enabled, Move reads daily step totals and the timing of the main sleep session from Health Connect, then caches daily summaries locally for dashboard and progress metrics. Sleep duration is neither cached nor scored. Move never writes health data. Goals, sleep windows, reminders, Quick Moves, and widget state remain entirely on-device.
 
 ## License
 

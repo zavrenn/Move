@@ -13,17 +13,24 @@ class ProgressScreen extends StatelessWidget {
     super.key,
     required this.logs,
     required this.steps,
+    required this.sleep,
     required this.goals,
+    required this.sleepSchedule,
+    required this.sleepSyncFailed,
   });
 
   final List<MovementLog> logs;
   final List<DailyStepCount> steps;
+  final List<DailySleepRecord> sleep;
   final DailyGoalSettings goals;
+  final SleepScheduleSettings sleepSchedule;
+  final bool sleepSyncFailed;
 
   @override
   Widget build(BuildContext context) {
     final analytics = MoveAnalytics(logs);
     final stepAnalytics = StepAnalytics(steps);
+    final sleepAnalytics = SleepAnalytics(sleep, sleepSchedule);
     final activity = ActivityAnalytics(
       movements: analytics,
       steps: stepAnalytics,
@@ -79,6 +86,17 @@ class ProgressScreen extends StatelessWidget {
             _StepsProgressCard(
               analytics: stepAnalytics,
               connected: steps.isNotEmpty,
+            ),
+            const SizedBox(height: 22),
+            const SectionTitle(
+              title: 'Sleep rhythm',
+              subtitle: 'Timing consistency across your last seven nights',
+            ),
+            const SizedBox(height: 10),
+            _SleepRhythmCard(
+              analytics: sleepAnalytics,
+              schedule: sleepSchedule,
+              syncFailed: sleepSyncFailed,
             ),
             const SizedBox(height: 22),
             const SectionTitle(
@@ -160,10 +178,15 @@ class _StepsProgressCard extends StatelessWidget {
 }
 
 class _StepMetric extends StatelessWidget {
-  const _StepMetric({required this.label, required this.value});
+  const _StepMetric({
+    required this.label,
+    required this.value,
+    this.color = MoveColors.secondary,
+  });
 
   final String label;
   final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -171,13 +194,111 @@ class _StepMetric extends StatelessWidget {
       children: [
         Text(
           value,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(color: MoveColors.secondary),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: color),
         ),
         const SizedBox(height: 3),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
       ],
+    );
+  }
+}
+
+class _SleepRhythmCard extends StatelessWidget {
+  const _SleepRhythmCard({
+    required this.analytics,
+    required this.schedule,
+    required this.syncFailed,
+  });
+
+  final SleepAnalytics analytics;
+  final SleepScheduleSettings schedule;
+  final bool syncFailed;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = analytics.todayActivity;
+    final average = analytics.sevenDayAverageDrift;
+    final recorded = analytics.lastSevenRecordedDays.length;
+    return SurfaceCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _StepMetric(
+                  label: 'TODAY’S DRIFT',
+                  color: MoveColors.sleep,
+                  value: today == null
+                      ? '—'
+                      : formatCompactDuration(today.combinedDriftMinutes * 60),
+                ),
+              ),
+              Container(width: 1, height: 39, color: MoveColors.border),
+              Expanded(
+                child: _StepMetric(
+                  label: '7-DAY AVERAGE',
+                  color: MoveColors.sleep,
+                  value: average == null
+                      ? '—'
+                      : formatCompactDuration(average * 60),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: today?.progress ?? 0,
+              minHeight: 5,
+              color: MoveColors.sleep,
+              backgroundColor: MoveColors.surfaceHigh,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(
+                Icons.bedtime_outlined,
+                color: MoveColors.sleep,
+                size: 17,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  '${_formatClock(schedule.bedtimeStartMinutes)}–'
+                  '${_formatClock(schedule.bedtimeEndMinutes)} · wake '
+                  '${_formatClock(schedule.wakeStartMinutes)}–'
+                  '${_formatClock(schedule.wakeEndMinutes)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              Text(
+                '$recorded / 7 nights',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          ),
+          if (syncFailed) ...[
+            const SizedBox(height: 10),
+            Text(
+              today == null
+                  ? 'Sleep timing could not refresh · retry from Today'
+                  : 'Refresh failed · showing cached sleep timing',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: MoveColors.danger),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatClock(int minutes) {
+    return DateFormat.jm().format(
+      DateTime(2000, 1, 1, minutes ~/ 60, minutes % 60),
     );
   }
 }
