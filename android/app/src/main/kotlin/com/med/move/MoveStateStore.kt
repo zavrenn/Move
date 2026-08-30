@@ -68,8 +68,13 @@ object MoveStateStore {
         }
         editor.apply()
         MoveWidgetProvider.updateAll(context)
+        ReminderScheduler.onConfigurationChanged(context)
         return preferencesMap(context)
     }
+
+    internal fun fallbackStepGoal(context: Context): Int =
+        preferences(context).getInt(KEY_STEP_GOAL, DEFAULT_STEP_GOAL)
+            .coerceIn(1000, 30000)
 
     fun setQuickMovementIds(context: Context, ids: List<String>) {
         val clean = ids.distinct().take(8)
@@ -98,6 +103,7 @@ object MoveStateStore {
             .putLong(KEY_LAST_UPDATED, System.currentTimeMillis())
             .apply()
         MoveWidgetProvider.updateAll(context)
+        ReminderScheduler.onSnapshotChanged(context)
     }
 
     fun snapshot(context: Context): Snapshot {

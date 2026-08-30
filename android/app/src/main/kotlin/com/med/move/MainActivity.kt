@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -46,6 +47,7 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "com.med.move/device"
         private const val REQUEST_HEALTH_PERMISSIONS = 4101
         private const val REQUEST_NOTIFICATION_PERMISSION = 4102
+        private const val REQUEST_NOTIFICATION_SETTINGS = 4103
         private const val SAMSUNG_HEALTH_PACKAGE = "com.sec.android.app.shealth"
     }
 
@@ -54,6 +56,7 @@ class MainActivity : FlutterActivity() {
         HealthPermission.getReadPermission(StepsRecord::class)
     private val sleepPermission =
         HealthPermission.getReadPermission(SleepSessionRecord::class)
+    private val backgroundReadPermission = SmartAlertDataSource.backgroundPermission
     private val samsungSleepGoalPermission =
         Permission.of(DataTypes.SLEEP_GOAL, AccessType.READ)
     private val samsungSleepGoalPermissions = setOf(samsungSleepGoalPermission)
@@ -66,12 +69,12 @@ class MainActivity : FlutterActivity() {
 
     private var pendingHealthPermissionResult: MethodChannel.Result? = null
     private var pendingHealthPermissions: Set<String>? = null
+    private var pendingHealthPermissionReturnsSmartStatus = false
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        ReminderScheduler.ensureNotificationChannel(this)
-        ReminderScheduler.ensureScheduled(this)
+        ReminderScheduler.initialize(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler(::handleMethodCall)
@@ -94,9 +97,12 @@ class MainActivity : FlutterActivity() {
                 requestSamsungStepTargetPermission(result)
             "readSamsungStepTarget" -> readSamsungStepTarget(result)
             "openHealthConnect" -> openHealthConnect(result)
-            "reminderStatus" -> result.success(ReminderScheduler.status(this))
+            "reminderStatus", "smartAlertStatus" -> smartAlertStatus(result)
+            "requestSmartAlertPermissions" -> requestSmartAlertPermissions(result)
             "requestNotificationPermission" -> requestNotificationPermission(result)
-            "setReminderEnabled" -> setReminderEnabled(call, result)
+            "setReminderEnabled", "setSmartAlertsEnabled" ->
+                setReminderEnabled(call, result)
+            "recordMovementActivity" -> recordMovementActivity(call, result)
             "appPreferences" -> result.success(MoveStateStore.preferencesMap(this))
             "setDailyGoals" -> setDailyGoals(call, result)
             "setQuickMovementIds" -> setQuickMovementIds(call, result)
@@ -145,6 +151,7 @@ class MainActivity : FlutterActivity() {
     private fun requestHealthPermissions(
         permissions: Set<String>,
         result: MethodChannel.Result,
+        returnSmartStatus: Boolean = false,
     ) {
         if (HealthConnectClient.getSdkStatus(this) != HealthConnectClient.SDK_AVAILABLE) {
             result.error("health_unavailable", "Health Connect is unavailable.", null)
@@ -159,11 +166,16 @@ class MainActivity : FlutterActivity() {
             try {
                 val granted = healthClient().permissionController.getGrantedPermissions()
                 if (granted.containsAll(permissions)) {
-                    result.success(true)
+                    if (returnSmartStatus) {
+                        result.success(ReminderScheduler.status(this@MainActivity))
+                    } else {
+                        result.success(true)
+                    }
                     return@launch
                 }
                 pendingHealthPermissionResult = result
                 pendingHealthPermissions = permissions
+                pendingHealthPermissionReturnsSmartStatus = returnSmartStatus
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     requestPermissions(
                         permissions.toTypedArray(),
@@ -179,6 +191,7 @@ class MainActivity : FlutterActivity() {
             } catch (error: Exception) {
                 pendingHealthPermissionResult = null
                 pendingHealthPermissions = null
+                pendingHealthPermissionReturnsSmartStatus = false
                 result.error("health_permission_failed", error.message, null)
             }
         }
@@ -598,24 +611,68 @@ class MainActivity : FlutterActivity() {
             result.success(true)
             return
         }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            result.success(true)
-            return
-        }
         if (pendingNotificationPermissionResult != null) {
             result.error("request_in_progress", "A permission request is already open.", null)
             return
         }
         pendingNotificationPermissionResult = result
-        requestPermissions(
-            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-            REQUEST_NOTIFICATION_PERMISSION,
-        )
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATION_PERMISSION,
+            )
+            return
+        }
+        try {
+            startActivityForResult(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                },
+                REQUEST_NOTIFICATION_SETTINGS,
+            )
+        } catch (error: Exception) {
+            pendingNotificationPermissionResult = null
+            result.error("notification_settings_failed", error.message, null)
+        }
+    }
+
+    private fun smartAlertStatus(result: MethodChannel.Result) {
+        activityScope.launch {
+            result.success(ReminderScheduler.status(this@MainActivity))
+        }
+    }
+
+    private fun requestSmartAlertPermissions(result: MethodChannel.Result) {
+        if (HealthConnectClient.getSdkStatus(this) != HealthConnectClient.SDK_AVAILABLE) {
+            smartAlertStatus(result)
+            return
+        }
+        activityScope.launch {
+            val capabilities = SmartAlertDataSource(this@MainActivity).capabilities()
+            val requested = buildSet {
+                add(stepsPermission)
+                if (capabilities.backgroundReadAvailable) add(backgroundReadPermission)
+            }
+            requestHealthPermissions(
+                permissions = requested,
+                result = result,
+                returnSmartStatus = true,
+            )
+        }
     }
 
     private fun setReminderEnabled(call: MethodCall, result: MethodChannel.Result) {
         val enabled = call.argument<Boolean>("enabled") ?: false
-        if (enabled && !ReminderScheduler.notificationsAllowed(this)) {
+        if (!enabled) {
+            ReminderScheduler.setEnabled(this, false)
+            smartAlertStatus(result)
+            return
+        }
+        if (!ReminderScheduler.notificationsAllowed(this)) {
             result.error(
                 "notification_permission_required",
                 "Notification permission is required.",
@@ -623,8 +680,33 @@ class MainActivity : FlutterActivity() {
             )
             return
         }
-        ReminderScheduler.setEnabled(this, enabled)
-        result.success(ReminderScheduler.status(this))
+        activityScope.launch {
+            val capabilities = SmartAlertDataSource(this@MainActivity).capabilities()
+            val error = when {
+                !capabilities.stepsGranted ->
+                    "steps_permission_required" to "Health Connect steps access is required."
+                !capabilities.backgroundReadAvailable ->
+                    "background_read_unavailable" to
+                        "Background Health Connect access requires Android 14+ and a current provider."
+                !capabilities.backgroundReadGranted ->
+                    "background_read_permission_required" to
+                        "Health Connect background access is required."
+                else -> null
+            }
+            if (error != null) {
+                result.error(error.first, error.second, null)
+                return@launch
+            }
+            ReminderScheduler.setEnabled(this@MainActivity, true)
+            result.success(ReminderScheduler.status(this@MainActivity))
+        }
+    }
+
+    private fun recordMovementActivity(call: MethodCall, result: MethodChannel.Result) {
+        val createdAt = call.argument<Number>("createdAt")?.toLong()
+            ?: System.currentTimeMillis()
+        ReminderScheduler.recordMovementActivity(this, createdAt)
+        result.success(null)
     }
 
     private fun setDailyGoals(call: MethodCall, result: MethodChannel.Result) {
@@ -684,13 +766,31 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == REQUEST_NOTIFICATION_SETTINGS) {
+            pendingNotificationPermissionResult?.success(
+                ReminderScheduler.notificationsAllowed(this),
+            )
+            pendingNotificationPermissionResult = null
+            return
+        }
         if (requestCode == REQUEST_HEALTH_PERMISSIONS) {
             val granted = healthPermissionContract.parseResult(resultCode, data)
-            pendingHealthPermissionResult?.success(
-                granted.containsAll(pendingHealthPermissions.orEmpty()),
-            )
+            val pendingResult = pendingHealthPermissionResult
+            val requestedPermissions = pendingHealthPermissions.orEmpty()
+            val returnStatus = pendingHealthPermissionReturnsSmartStatus
             pendingHealthPermissionResult = null
             pendingHealthPermissions = null
+            pendingHealthPermissionReturnsSmartStatus = false
+            if (returnStatus) {
+                activityScope.launch {
+                    if (ReminderScheduler.isEnabled(this@MainActivity)) {
+                        ReminderScheduler.onConfigurationChanged(this@MainActivity)
+                    }
+                    pendingResult?.success(ReminderScheduler.status(this@MainActivity))
+                }
+            } else {
+                pendingResult?.success(granted.containsAll(requestedPermissions))
+            }
             return
         }
         super.onActivityResult(requestCode, resultCode, data)
@@ -705,9 +805,21 @@ class MainActivity : FlutterActivity() {
             val granted = pendingHealthPermissions.orEmpty().all {
                 checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
             }
-            pendingHealthPermissionResult?.success(granted)
+            val pendingResult = pendingHealthPermissionResult
+            val returnStatus = pendingHealthPermissionReturnsSmartStatus
             pendingHealthPermissionResult = null
             pendingHealthPermissions = null
+            pendingHealthPermissionReturnsSmartStatus = false
+            if (returnStatus) {
+                activityScope.launch {
+                    if (ReminderScheduler.isEnabled(this@MainActivity)) {
+                        ReminderScheduler.onConfigurationChanged(this@MainActivity)
+                    }
+                    pendingResult?.success(ReminderScheduler.status(this@MainActivity))
+                }
+            } else {
+                pendingResult?.success(granted)
+            }
             return
         }
         if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
@@ -724,6 +836,7 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         pendingHealthPermissionResult?.error("activity_destroyed", "Permission request closed.", null)
         pendingHealthPermissions = null
+        pendingHealthPermissionReturnsSmartStatus = false
         pendingNotificationPermissionResult?.error(
             "activity_destroyed",
             "Permission request closed.",

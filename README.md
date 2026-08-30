@@ -24,7 +24,7 @@ Move makes it fast to record small bursts of activity without accounts or subscr
 - Read-only bedtime and wake-up target from Samsung Health, with fixed ±30-minute scoring windows
 - Independent daily movement goal and Samsung Health step target
 - Explainable 100-point Rhythm Score across moves, steps, sleep-target timing, and balance
-- One optional, progress-aware reminder at a random time from 5 AM to 11 PM
+- Optional Smart Movement Alerts after about one inactive hour, adapted to step progress, goals, and sleep hours
 - Customizable Quick Moves with add, remove, and drag ordering
 - Weekly recaps, unified active-day streaks, and a 35-day consistency view
 - Compact Home-screen widget for today’s goals and progress
@@ -75,13 +75,13 @@ lib/
 ├── progress_screen.dart        Trends and consistency views
 ├── movement_log_sheet.dart     Movement logging flow
 ├── quick_moves_sheet.dart      Quick Move customization
-├── move_settings_sheet.dart    Goals, reminders, Health, and widget settings
-└── device_services.dart        Health, reminders, goals, and widget bridge
+├── move_settings_sheet.dart    Goals, Smart Alerts, Health, and widget settings
+└── device_services.dart        Health, alerts, goals, and widget bridge
 
 android/app/src/main/kotlin/com/med/move/
 ├── MainActivity.kt             Health Connect, Samsung Health, and Flutter bridge
-├── ReminderScheduler.kt        Daily reminder scheduling and delivery
-├── MoveStateStore.kt           Shared goal, widget, and reminder state
+├── ReminderScheduler.kt        Adaptive inactivity checks and alert delivery
+├── MoveStateStore.kt           Shared goal, widget, and alert state
 └── MoveWidgetProvider.kt       Native home-screen widget
 ```
 
@@ -89,7 +89,7 @@ android/app/src/main/kotlin/com/med/move/
 
 Move does not collect personal data. Movement logs are stored only in the app's local SQLite database. Removing the app also removes its local data unless Android restores it from a device backup.
 
-When enabled, Move reads daily step totals and the timing of the main sleep session from Health Connect. Samsung Health supplies the daily step target plus the bedtime and wake-up target, from which Move derives fixed ±30-minute sleep windows. If the Samsung step target is unavailable, Move uses its locally configured fallback. Daily timing summaries are cached locally for dashboard and progress metrics; sleep duration is neither cached as a metric nor scored. Move never writes health data. Goals, reminders, Quick Moves, and widget state remain entirely on-device.
+When enabled, Move reads daily step totals and the timing of the main sleep session from Health Connect. Smart Movement Alerts additionally use optional background step access to detect inactivity while Move is closed. Samsung Health supplies the daily step target plus the bedtime and wake-up target, from which Move derives fixed ±30-minute scoring windows and quiet hours. If the Samsung step target is unavailable, Move uses its locally configured fallback. Daily timing summaries are cached locally for dashboard and progress metrics; sleep duration is neither cached as a metric nor scored. Move never writes health data. Goals, alerts, Quick Moves, and widget state remain entirely on-device.
 
 ## License
 

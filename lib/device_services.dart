@@ -224,57 +224,123 @@ class DailySleepSync {
   }
 }
 
-class ReminderStatus {
-  const ReminderStatus({
+class SmartAlertStatus {
+  const SmartAlertStatus({
     required this.enabled,
     required this.notificationGranted,
-    required this.nextAt,
-    required this.startHour,
-    required this.endHour,
+    required this.stepsGranted,
+    required this.backgroundReadAvailable,
+    required this.backgroundReadGranted,
+    required this.operational,
+    required this.workerScheduled,
+    required this.active,
+    required this.trackingStartAt,
+    required this.activeWindowEndAt,
+    required this.inactiveSince,
+    required this.lastActivityAt,
+    required this.lastAlertAt,
+    required this.alertsToday,
+    required this.nextCheckAt,
+    required this.deferReason,
   });
 
   final bool enabled;
   final bool notificationGranted;
-  final DateTime? nextAt;
-  final int startHour;
-  final int endHour;
+  final bool stepsGranted;
+  final bool backgroundReadAvailable;
+  final bool backgroundReadGranted;
+  final bool operational;
+  final bool workerScheduled;
+  final bool active;
+  final DateTime? trackingStartAt;
+  final DateTime? activeWindowEndAt;
+  final DateTime? inactiveSince;
+  final DateTime? lastActivityAt;
+  final DateTime? lastAlertAt;
+  final int alertsToday;
+  final DateTime? nextCheckAt;
+  final String deferReason;
 
-  factory ReminderStatus.fromPlatform(Map<Object?, Object?> map) {
-    final nextAt = (map['nextAt'] as num?)?.toInt() ?? 0;
-    return ReminderStatus(
+  bool get permissionsGranted =>
+      notificationGranted &&
+      stepsGranted &&
+      backgroundReadAvailable &&
+      backgroundReadGranted;
+
+  bool get needsPermissionSetup => !permissionsGranted;
+
+  factory SmartAlertStatus.fromPlatform(Map<Object?, Object?> map) {
+    DateTime? parseTimestamp(String key) {
+      final value = (map[key] as num?)?.toInt() ?? 0;
+      return value > 0 ? DateTime.fromMillisecondsSinceEpoch(value) : null;
+    }
+
+    return SmartAlertStatus(
       enabled: map['enabled'] as bool? ?? false,
       notificationGranted: map['notificationGranted'] as bool? ?? false,
-      nextAt: nextAt > 0 ? DateTime.fromMillisecondsSinceEpoch(nextAt) : null,
-      startHour: (map['startHour'] as num?)?.toInt() ?? 5,
-      endHour: (map['endHour'] as num?)?.toInt() ?? 23,
+      stepsGranted: map['stepsGranted'] as bool? ?? false,
+      backgroundReadAvailable: map['backgroundReadAvailable'] as bool? ?? false,
+      backgroundReadGranted: map['backgroundReadGranted'] as bool? ?? false,
+      operational: map['operational'] as bool? ?? false,
+      workerScheduled: map['workerScheduled'] as bool? ?? false,
+      active: map['active'] as bool? ?? false,
+      trackingStartAt: parseTimestamp('trackingStartAt'),
+      activeWindowEndAt: parseTimestamp('activeWindowEndAt'),
+      inactiveSince: parseTimestamp('inactiveSince'),
+      lastActivityAt: parseTimestamp('lastActivityAt'),
+      lastAlertAt: parseTimestamp('lastAlertAt'),
+      alertsToday: (map['alertsToday'] as num?)?.toInt() ?? 0,
+      nextCheckAt: parseTimestamp('nextCheckAt'),
+      deferReason: map['deferReason'] as String? ?? '',
     );
   }
 }
 
-class ReminderService {
-  const ReminderService();
+class SmartAlertService {
+  const SmartAlertService();
 
   static const _channel = MethodChannel('com.med.move/device');
 
-  Future<ReminderStatus> getStatus() async {
+  Future<SmartAlertStatus> getStatus() async {
     final value = await _channel.invokeMapMethod<Object?, Object?>(
       'reminderStatus',
     );
-    return ReminderStatus.fromPlatform(value ?? const {});
+    return SmartAlertStatus.fromPlatform(value ?? const {});
   }
 
-  Future<bool> requestPermission() async {
+  Future<bool> requestNotificationPermission() async {
     return await _channel.invokeMethod<bool>('requestNotificationPermission') ??
         false;
   }
 
-  Future<ReminderStatus> setEnabled(bool enabled) async {
+  Future<SmartAlertStatus> requestActivityPermissions() async {
+    final value = await _channel.invokeMapMethod<Object?, Object?>(
+      'requestSmartAlertPermissions',
+    );
+    return SmartAlertStatus.fromPlatform(value ?? const {});
+  }
+
+  Future<SmartAlertStatus> setEnabled(bool enabled) async {
     final value = await _channel.invokeMapMethod<Object?, Object?>(
       'setReminderEnabled',
       {'enabled': enabled},
     );
-    return ReminderStatus.fromPlatform(value ?? const {});
+    return SmartAlertStatus.fromPlatform(value ?? const {});
   }
+
+  Future<void> recordMovementActivity({required DateTime createdAt}) {
+    return _channel.invokeMethod<void>('recordMovementActivity', {
+      'createdAt': createdAt.millisecondsSinceEpoch,
+    });
+  }
+}
+
+@Deprecated('Use SmartAlertStatus.')
+typedef ReminderStatus = SmartAlertStatus;
+
+@Deprecated('Use SmartAlertService.')
+class ReminderService extends SmartAlertService {
+  const ReminderService();
 }
 
 class MovePreferences {

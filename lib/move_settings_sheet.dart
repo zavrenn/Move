@@ -31,7 +31,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     with WidgetsBindingObserver {
   final _health = const HealthConnectService();
   final _samsungHealth = const SamsungHealthService();
-  final _reminders = const ReminderService();
+  final _smartAlerts = const SmartAlertService();
   final _preferences = const MovePreferencesService();
   final _widget = const HomeWidgetService();
 
@@ -41,7 +41,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
   SamsungHealthStatus? _sleepTargetStatus;
   SamsungStepTarget? _stepTarget;
   SamsungSleepTarget? _sleepTarget;
-  ReminderStatus? _reminderStatus;
+  SmartAlertStatus? _smartAlertStatus;
   DailyGoalSettings _goals = DailyGoalSettings.standard;
   HomeWidgetStatus? _widgetStatus;
   bool _healthBusy = false;
@@ -50,7 +50,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
   bool _sleepTargetBusy = false;
   bool _stepTargetFailed = false;
   bool _sleepTargetFailed = false;
-  bool _reminderBusy = false;
+  bool _smartAlertBusy = false;
   bool _goalBusy = false;
   bool _widgetBusy = false;
 
@@ -74,6 +74,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadWidgetStatus();
+      _loadSmartAlertStatus();
       _refreshStepTarget();
       _refreshSleepTarget();
     }
@@ -84,7 +85,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
       final values = await Future.wait<Object>([
         _health.getStatus(),
         _health.getSleepStatus(),
-        _reminders.getStatus(),
+        _smartAlerts.getStatus(),
         _preferences.getPreferences(),
         _widget.getStatus(),
       ]);
@@ -93,7 +94,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
       setState(() {
         _healthStatus = values[0] as HealthConnectStatus;
         _sleepStatus = values[1] as HealthConnectStatus;
-        _reminderStatus = values[2] as ReminderStatus;
+        _smartAlertStatus = values[2] as SmartAlertStatus;
         _goals = preferences.goals;
         _stepTarget = preferences.cachedSamsungStepTarget;
         if (_stepTarget != null) {
@@ -114,6 +115,15 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
       if (mounted) setState(() => _widgetStatus = status);
     } catch (_) {
       // The widget status will refresh the next time settings opens.
+    }
+  }
+
+  Future<void> _loadSmartAlertStatus() async {
+    try {
+      final status = await _smartAlerts.getStatus();
+      if (mounted) setState(() => _smartAlertStatus = status);
+    } catch (_) {
+      // The status will refresh the next time settings opens.
     }
   }
 
@@ -263,24 +273,69 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     await _refreshSleepTarget();
   }
 
-  Future<void> _toggleReminder(bool enabled) async {
-    setState(() => _reminderBusy = true);
-    try {
-      var granted = _reminderStatus?.notificationGranted ?? false;
-      if (enabled && !granted) {
-        granted = await _reminders.requestPermission();
+  Future<void> _toggleSmartAlerts(bool enabled) async {
+    if (_smartAlertBusy) return;
+    if (!enabled) {
+      setState(() => _smartAlertBusy = true);
+      try {
+        final status = await _smartAlerts.setEnabled(false);
+        if (mounted) setState(() => _smartAlertStatus = status);
+      } catch (_) {
+        if (mounted) _showError('Could not turn off movement alerts.');
+      } finally {
+        if (mounted) setState(() => _smartAlertBusy = false);
       }
-      if (enabled && !granted) {
-        if (mounted) _showError('Notification permission was not enabled.');
+      return;
+    }
+    await _configureSmartAlerts(enableWhenReady: true);
+  }
+
+  Future<void> _configureSmartAlerts({bool enableWhenReady = false}) async {
+    if (_smartAlertBusy) return;
+    setState(() => _smartAlertBusy = true);
+    try {
+      var status = _smartAlertStatus ?? await _smartAlerts.getStatus();
+      final shouldEnable = enableWhenReady || status.enabled;
+
+      if (!status.notificationGranted) {
+        await _smartAlerts.requestNotificationPermission();
+        status = await _smartAlerts.getStatus();
+        if (!status.notificationGranted) {
+          if (mounted) {
+            setState(() => _smartAlertStatus = status);
+            _showError(_missingSmartAlertPermission(status));
+          }
+          return;
+        }
+      }
+      if (!status.backgroundReadAvailable) {
+        if (mounted) {
+          setState(() => _smartAlertStatus = status);
+          _showError(
+            'Smart Alerts require Android 14+ and compatible Health Connect '
+            'background access.',
+          );
+        }
         return;
       }
-      final status = await _reminders.setEnabled(enabled);
+      if (!status.stepsGranted || !status.backgroundReadGranted) {
+        status = await _smartAlerts.requestActivityPermissions();
+      }
       if (!mounted) return;
-      setState(() => _reminderStatus = status);
+      setState(() => _smartAlertStatus = status);
+      if (!status.permissionsGranted) {
+        _showError(_missingSmartAlertPermission(status));
+        return;
+      }
+      if (shouldEnable) {
+        status = await _smartAlerts.setEnabled(true);
+        if (mounted) setState(() => _smartAlertStatus = status);
+      }
     } catch (_) {
-      if (mounted) _showError('Could not update the daily reminder.');
+      await _loadSmartAlertStatus();
+      if (mounted) _showError('Could not finish movement alert setup.');
     } finally {
-      if (mounted) setState(() => _reminderBusy = false);
+      if (mounted) setState(() => _smartAlertBusy = false);
     }
   }
 
@@ -326,7 +381,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
 
   @override
   Widget build(BuildContext context) {
-    final reminder = _reminderStatus;
+    final smartAlert = _smartAlertStatus;
     return Container(
       decoration: const BoxDecoration(
         color: MoveColors.background,
@@ -364,24 +419,53 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                 ),
                 const SizedBox(height: 18),
                 const SectionTitle(
-                  title: 'Daily reminder',
-                  subtitle: 'Adapts to progress and stays quiet when done',
+                  title: 'Smart movement alerts',
+                  subtitle: 'Adaptive nudges after an inactive hour',
                 ),
                 const SizedBox(height: 10),
                 SurfaceCard(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
-                  child: SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: reminder?.enabled ?? false,
-                    onChanged: reminder == null || _reminderBusy
-                        ? null
-                        : _toggleReminder,
-                    secondary: const Icon(
-                      Icons.notifications_active_rounded,
-                      color: MoveColors.primary,
-                    ),
-                    title: const Text('Remind me to move'),
-                    subtitle: Text(_reminderDescription(reminder)),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: smartAlert?.enabled ?? false,
+                        onChanged:
+                            smartAlert == null ||
+                                _smartAlertBusy ||
+                                (!smartAlert.enabled &&
+                                    !smartAlert.backgroundReadAvailable)
+                            ? null
+                            : _toggleSmartAlerts,
+                        secondary: const Icon(
+                          Icons.notifications_active_rounded,
+                          color: MoveColors.primary,
+                        ),
+                        title: const Text('Adaptive inactivity alerts'),
+                        subtitle: Text(_smartAlertDescription(smartAlert)),
+                      ),
+                      if (smartAlert?.needsPermissionSetup == true &&
+                          smartAlert?.backgroundReadAvailable == true)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 44),
+                          child: TextButton.icon(
+                            onPressed: _smartAlertBusy
+                                ? null
+                                : () => _configureSmartAlerts(),
+                            icon: const Icon(Icons.security_rounded),
+                            label: const Text('Finish setup'),
+                          ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(44, 0, 8, 4),
+                        child: Text(
+                          'While enabled, Move reads steps in the background. '
+                          'Health data stays read-only and on this device.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -792,12 +876,76 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     );
   }
 
-  String _reminderDescription(ReminderStatus? status) {
-    if (status == null) return 'Loading…';
-    if (!status.enabled) return 'One random reminder between 5 AM and 11 PM';
-    final next = status.nextAt;
-    if (next == null) return 'One random reminder between 5 AM and 11 PM';
-    return 'Next reminder ${DateFormat('EEE · h:mm a').format(next)}';
+  String _smartAlertDescription(SmartAlertStatus? status) {
+    if (status == null) return 'Checking setup…';
+    if (!status.backgroundReadAvailable) {
+      return 'Requires Android 14+ and compatible Health Connect background access.';
+    }
+    if (!status.notificationGranted) {
+      return status.enabled
+          ? 'Paused · notification access is required.'
+          : 'Setup requires notification access.';
+    }
+    if (!status.stepsGranted) {
+      return status.enabled
+          ? 'Paused · Health Connect steps access is required.'
+          : 'Setup requires Health Connect steps access.';
+    }
+    if (!status.backgroundReadGranted) {
+      return status.enabled
+          ? 'Paused · background activity access is required.'
+          : 'Setup requires background activity access.';
+    }
+    if (!status.enabled) {
+      return 'Alerts after 60 inactive minutes · quiet during sleep and after goals.';
+    }
+    if (!status.operational || !status.workerScheduled) {
+      return 'Enabled · waiting for background monitoring.';
+    }
+
+    final deferred = switch (status.deferReason) {
+      'outside_active_window' => 'Quiet during sleep hours.',
+      'goals_complete' => 'Quiet · today’s activity goals are complete.',
+      'unreliable_steps' => 'Paused until step data is reliable.',
+      'unreliable_target' => 'Paused until the daily step target is reliable.',
+      'step_counter_reset' =>
+        'Step data changed · rebuilding the inactivity baseline.',
+      'awaiting_baseline' => 'Establishing the current activity baseline.',
+      'activity_detected' => 'Activity detected · inactivity timer restarted.',
+      'cooldown' => 'Cooling down after the last alert.',
+      'daily_limit' => 'Quiet · today’s three-alert limit is reached.',
+      'notification_visible' => 'An alert is already waiting for you.',
+      _ => null,
+    };
+    if (deferred != null) return deferred;
+
+    final trackingStart = status.trackingStartAt;
+    if (trackingStart != null && DateTime.now().isBefore(trackingStart)) {
+      final earliestAlert = trackingStart.add(const Duration(hours: 1));
+      return 'Tracking starts ${DateFormat.jm().format(trackingStart)} · '
+          'earliest alert ${DateFormat.jm().format(earliestAlert)}.';
+    }
+    final used = status.alertsToday.clamp(0, 3);
+    return status.active
+        ? 'Monitoring activity · $used of 3 alerts used today.'
+        : 'Enabled · quiet until the next active window.';
+  }
+
+  String _missingSmartAlertPermission(SmartAlertStatus status) {
+    if (!status.notificationGranted) {
+      return 'Notification access is required for movement alerts.';
+    }
+    if (!status.stepsGranted) {
+      return 'Health Connect steps access is required for movement alerts.';
+    }
+    if (!status.backgroundReadAvailable) {
+      return 'Smart Alerts require Android 14+ and compatible Health Connect '
+          'background access.';
+    }
+    if (!status.backgroundReadGranted) {
+      return 'Background activity access is required for movement alerts.';
+    }
+    return 'Movement alert setup is incomplete.';
   }
 
   String _healthTitle(HealthConnectStatus? status) => switch (status) {

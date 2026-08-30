@@ -42,6 +42,7 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
   final _health = const HealthConnectService();
   final _samsungHealth = const SamsungHealthService();
   final _preferences = const MovePreferencesService();
+  final _smartAlerts = const SmartAlertService();
   List<MovementLog> _logs = const [];
   List<DailyStepCount> _steps = const [];
   List<DailySleepRecord> _sleep = const [];
@@ -451,8 +452,16 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
     if (log == null) return;
 
     try {
-      if (log.id == null) {
-        await _database.insertLog(log);
+      final isNew = log.id == null;
+      if (isNew) {
+        final inserted = await _database.insertLog(log);
+        try {
+          await _smartAlerts.recordMovementActivity(
+            createdAt: inserted.createdAt,
+          );
+        } catch (_) {
+          // The movement is safely stored; an alert bridge failure is non-fatal.
+        }
       } else {
         await _database.updateLog(log);
       }
@@ -463,7 +472,7 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
         ..showSnackBar(
           SnackBar(
             content: Text(
-              log.id == null ? '${log.movement.name} logged' : 'Log updated',
+              isNew ? '${log.movement.name} logged' : 'Log updated',
             ),
             behavior: SnackBarBehavior.floating,
           ),
