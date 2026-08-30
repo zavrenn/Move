@@ -57,6 +57,9 @@ class MainActivity : FlutterActivity() {
     private val samsungSleepGoalPermission =
         Permission.of(DataTypes.SLEEP_GOAL, AccessType.READ)
     private val samsungSleepGoalPermissions = setOf(samsungSleepGoalPermission)
+    private val samsungStepGoalPermission =
+        Permission.of(DataTypes.STEPS_GOAL, AccessType.READ)
+    private val samsungStepGoalPermissions = setOf(samsungStepGoalPermission)
     private val healthPermissionContract by lazy {
         PermissionController.createRequestPermissionResultContract()
     }
@@ -86,6 +89,10 @@ class MainActivity : FlutterActivity() {
             "requestSamsungSleepTargetPermission" ->
                 requestSamsungSleepTargetPermission(result)
             "readSamsungSleepTarget" -> readSamsungSleepTarget(result)
+            "samsungStepTargetStatus" -> samsungStepTargetStatus(result)
+            "requestSamsungStepTargetPermission" ->
+                requestSamsungStepTargetPermission(result)
+            "readSamsungStepTarget" -> readSamsungStepTarget(result)
             "openHealthConnect" -> openHealthConnect(result)
             "reminderStatus" -> result.success(ReminderScheduler.status(this))
             "requestNotificationPermission" -> requestNotificationPermission(result)
@@ -340,6 +347,11 @@ class MainActivity : FlutterActivity() {
         val wakeTime: LocalTime,
     )
 
+    private data class SamsungStepGoal(
+        val steps: Int,
+        val localDate: LocalDate,
+    )
+
     private fun samsungSleepTargetStatus(result: MethodChannel.Result) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             result.success("unsupported")
@@ -438,6 +450,108 @@ class MainActivity : FlutterActivity() {
         return SamsungSleepGoal(bedtime = bedtime, wakeTime = wakeTime)
     }
 
+    private fun samsungStepTargetStatus(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.success("unsupported")
+            return
+        }
+        activityScope.launch {
+            try {
+                val granted = samsungStore()
+                    .getGrantedPermissions(samsungStepGoalPermissions)
+                    .contains(samsungStepGoalPermission)
+                result.success(if (granted) "connected" else "permissionRequired")
+            } catch (error: HealthDataException) {
+                result.success(samsungStatus(error))
+            } catch (_: Exception) {
+                result.success("error")
+            }
+        }
+    }
+
+    private fun requestSamsungStepTargetPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.error("samsung_health_unsupported", "Android 10 or newer is required.", null)
+            return
+        }
+        activityScope.launch {
+            try {
+                val granted = samsungStore().requestPermissions(
+                    samsungStepGoalPermissions,
+                    this@MainActivity,
+                )
+                result.success(granted.contains(samsungStepGoalPermission))
+            } catch (error: ResolvablePlatformException) {
+                if (error.hasResolution) {
+                    error.resolve(this@MainActivity)
+                    result.success(false)
+                } else {
+                    result.error(
+                        samsungErrorKey(error, "samsung_step_goal_permission_required"),
+                        error.errorMessage,
+                        error.errorCode,
+                    )
+                }
+            } catch (error: HealthDataException) {
+                result.error(
+                    samsungErrorKey(error, "samsung_step_goal_permission_required"),
+                    error.errorMessage,
+                    error.errorCode,
+                )
+            } catch (error: Exception) {
+                result.error("samsung_health_error", error.message, null)
+            }
+        }
+    }
+
+    private fun readSamsungStepTarget(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.error("samsung_health_unsupported", "Android 10 or newer is required.", null)
+            return
+        }
+        activityScope.launch {
+            try {
+                val store = samsungStore()
+                val granted = store.getGrantedPermissions(samsungStepGoalPermissions)
+                if (!granted.contains(samsungStepGoalPermission)) {
+                    result.error(
+                        "samsung_step_goal_permission_required",
+                        "Samsung Health step goal permission is required.",
+                        null,
+                    )
+                    return@launch
+                }
+                val goal = readSamsungStepGoal(store)
+                result.success(
+                    goal?.let {
+                        mapOf(
+                            "steps" to it.steps,
+                            "date" to it.localDate.toString(),
+                        )
+                    },
+                )
+            } catch (error: HealthDataException) {
+                result.error(
+                    samsungErrorKey(error, "samsung_step_goal_permission_required"),
+                    error.errorMessage,
+                    error.errorCode,
+                )
+            } catch (error: Exception) {
+                result.error("samsung_health_error", error.message, null)
+            }
+        }
+    }
+
+    private suspend fun readSamsungStepGoal(store: HealthDataStore): SamsungStepGoal? {
+        val today = LocalDate.now()
+        val request = DataType.StepsGoalType.LAST.requestBuilder
+            .setLocalDateFilter(LocalDateFilter.of(today, today.plusDays(1)))
+            .build()
+        val steps = store.aggregateData(request).dataList
+            .lastOrNull()?.value?.takeIf { it > 0 } ?: return null
+        return SamsungStepGoal(steps = steps, localDate = today)
+    }
+
     private fun samsungStore(): HealthDataStore =
         HealthDataService.getStore(applicationContext)
 
@@ -457,7 +571,10 @@ class MainActivity : FlutterActivity() {
         else -> "error"
     }
 
-    private fun samsungErrorKey(error: HealthDataException): String = when (error) {
+    private fun samsungErrorKey(
+        error: HealthDataException,
+        permissionRequiredKey: String = "samsung_sleep_goal_permission_required",
+    ): String = when (error) {
         is ResolvablePlatformException -> when (error.errorCode) {
             ErrorCode.ERR_PLATFORM_NOT_INSTALLED -> "samsung_health_not_installed"
             ErrorCode.ERR_OLD_VERSION_PLATFORM -> "samsung_health_update_required"
@@ -466,7 +583,7 @@ class MainActivity : FlutterActivity() {
             else -> "samsung_health_unavailable"
         }
         is AuthorizationException -> when (error.errorCode) {
-            ErrorCode.ERR_NO_USER_PERMISSION -> "samsung_sleep_goal_permission_required"
+            ErrorCode.ERR_NO_USER_PERMISSION -> permissionRequiredKey
             ErrorCode.ERR_ACCESS_CONTROL -> "samsung_health_sdk_policy_denied"
             ErrorCode.ERR_UNSUPPORTED_OPERATION -> "samsung_health_unsupported"
             ErrorCode.ERR_INVALID_PLATFORM_SIGNATURE -> "samsung_health_invalid_platform"
@@ -539,6 +656,8 @@ class MainActivity : FlutterActivity() {
             steps = call.argument<Int>("steps") ?: 0,
             movements = call.argument<Int>("movements") ?: 0,
             streak = call.argument<Int>("streak") ?: 0,
+            stepGoal = call.argument<Int>("stepGoal") ?: MoveStateStore.DEFAULT_STEP_GOAL,
+            usesSamsungStepGoal = call.argument<Boolean>("usesSamsungStepGoal") ?: false,
         )
         result.success(null)
     }

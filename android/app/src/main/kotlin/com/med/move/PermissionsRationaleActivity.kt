@@ -31,7 +31,7 @@ class PermissionsRationaleActivity : Activity() {
         })
         content.addView(TextView(this).apply {
             text = "Move reads daily steps and actual sleep timing from Health Connect. " +
-                "Your sleep target is read separately from Samsung Health. " +
+                "Your step and sleep targets are read separately from Samsung Health. " +
                 "Move never writes health data or sends it off this device. " +
                 "Daily totals and sleep rhythm are cached locally for your dashboard and progress views."
             textSize = 17f

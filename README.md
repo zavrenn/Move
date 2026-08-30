@@ -10,7 +10,7 @@
 
 ## About
 
-Move makes it fast to record small bursts of activity without accounts or subscriptions. Log repetitions such as squats and push-ups, track timed movements such as planks and stretches, and bring in daily steps and actual sleep sessions through read-only Health Connect access. Samsung Health supplies the bedtime and wake-up target used for sleep scoring. Activity history and preferences stay on the device.
+Move makes it fast to record small bursts of activity without accounts or subscriptions. Log repetitions such as squats and push-ups, track timed movements such as planks and stretches, and bring in daily steps and actual sleep sessions through read-only Health Connect access. Samsung Health supplies the daily step target plus the bedtime and wake-up target used for scoring. Activity history and preferences stay on the device.
 
 ## Features
 
@@ -19,9 +19,10 @@ Move makes it fast to record small bursts of activity without accounts or subscr
 - Left, right, and both-side tracking where useful
 - Optional notes plus log editing and deletion
 - Read-only daily steps through Android Health Connect, including Samsung Health
+- Read-only daily step target from Samsung Health, with a configurable Move fallback
 - Read-only actual sleep sessions through Health Connect
 - Read-only bedtime and wake-up target from Samsung Health, with fixed ±30-minute scoring windows
-- Independent daily movement and step goals
+- Independent daily movement goal and Samsung Health step target
 - Explainable 100-point Rhythm Score across moves, steps, sleep-target timing, and balance
 - One optional, progress-aware reminder at a random time from 5 AM to 11 PM
 - Customizable Quick Moves with add, remove, and drag ordering
@@ -36,7 +37,7 @@ Accounts and cloud synchronization are intentionally outside the current scope.
 
 ## Download
 
-Download the latest Android APK from [GitHub Releases](https://github.com/zavrenn/Move/releases/latest). Move supports Android 10 (API 29) and newer. Automatic steps and actual sleep sessions require Health Connect; sleep scoring also requires a Samsung Health sleep target.
+Download the latest Android APK from [GitHub Releases](https://github.com/zavrenn/Move/releases/latest). Move supports Android 10 (API 29) and newer. Automatic steps and actual sleep sessions require Health Connect; Samsung Health supplies step and sleep targets when connected.
 
 ## Run locally
 
@@ -88,7 +89,7 @@ android/app/src/main/kotlin/com/med/move/
 
 Move does not collect personal data. Movement logs are stored only in the app's local SQLite database. Removing the app also removes its local data unless Android restores it from a device backup.
 
-When enabled, Move reads daily step totals and the timing of the main sleep session from Health Connect. Samsung Health supplies the bedtime and wake-up target, from which Move derives fixed ±30-minute target windows. Daily timing summaries are cached locally for dashboard and progress metrics; sleep duration is neither cached as a metric nor scored. Move never writes health data. Goals, reminders, Quick Moves, and widget state remain entirely on-device.
+When enabled, Move reads daily step totals and the timing of the main sleep session from Health Connect. Samsung Health supplies the daily step target plus the bedtime and wake-up target, from which Move derives fixed ±30-minute sleep windows. If the Samsung step target is unavailable, Move uses its locally configured fallback. Daily timing summaries are cached locally for dashboard and progress metrics; sleep duration is neither cached as a metric nor scored. Move never writes health data. Goals, reminders, Quick Moves, and widget state remain entirely on-device.
 
 ## License
 

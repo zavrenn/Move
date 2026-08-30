@@ -64,4 +64,62 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test(
+    'Samsung step target overrides the Move fallback without replacing it',
+    () {
+      const fallback = DailyGoalSettings(stepGoal: 8000, movementGoal: 3);
+      const target = SamsungStepTarget(steps: 12000, localDate: '2026-08-30');
+
+      expect(
+        fallback
+            .resolveStepTarget(target, localDate: DateTime(2026, 8, 30))
+            .stepGoal,
+        12000,
+      );
+      expect(
+        fallback
+            .resolveStepTarget(target, localDate: DateTime(2026, 8, 31))
+            .stepGoal,
+        8000,
+      );
+      expect(fallback.resolveStepTarget(null).stepGoal, 8000);
+      expect(fallback.stepGoal, 8000);
+    },
+  );
+
+  test('Samsung step target parser rejects missing and malformed values', () {
+    expect(
+      () => SamsungStepTarget.fromPlatform(const {}),
+      throwsFormatException,
+    );
+    expect(
+      () => SamsungStepTarget.fromPlatform({
+        'steps': 8000.5,
+        'date': '2026-08-30',
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => SamsungStepTarget.fromPlatform({'steps': 0, 'date': '2026-08-30'}),
+      throwsFormatException,
+    );
+    expect(
+      () => SamsungStepTarget.fromPlatform({'steps': 8000}),
+      throwsFormatException,
+    );
+  });
+
+  test('preferences preserve the fallback beside a cached Samsung target', () {
+    final preferences = MovePreferences.fromPlatform({
+      'stepGoal': 8000,
+      'movementGoal': 3,
+      'cachedSamsungStepGoal': 12000,
+      'cachedSamsungStepGoalDate': '2026-08-30',
+    });
+
+    expect(preferences.goals.stepGoal, 8000);
+    expect(preferences.cachedSamsungStepTarget?.steps, 12000);
+    expect(preferences.cachedSamsungStepTarget?.localDate, '2026-08-30');
+  });
 }

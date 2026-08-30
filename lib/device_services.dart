@@ -56,6 +56,20 @@ class SamsungHealthService {
     }
   }
 
+  Future<SamsungHealthStatus> getStepTargetStatus() async {
+    if (!Platform.isAndroid) return SamsungHealthStatus.unsupported;
+    try {
+      final value = await _channel.invokeMethod<String>(
+        'samsungStepTargetStatus',
+      );
+      return _statusFromPlatform(value);
+    } on PlatformException {
+      return SamsungHealthStatus.error;
+    } on MissingPluginException {
+      return SamsungHealthStatus.unsupported;
+    }
+  }
+
   Future<bool> requestSleepTargetPermission() async {
     return await _channel.invokeMethod<bool>(
           'requestSamsungSleepTargetPermission',
@@ -68,6 +82,36 @@ class SamsungHealthService {
       'readSamsungSleepTarget',
     );
     return value == null ? null : SamsungSleepTarget.fromPlatform(value);
+  }
+
+  Future<bool> requestStepTargetPermission() async {
+    return await _channel.invokeMethod<bool>(
+          'requestSamsungStepTargetPermission',
+        ) ??
+        false;
+  }
+
+  Future<SamsungStepTarget?> readStepTarget() async {
+    final value = await _channel.invokeMapMethod<Object?, Object?>(
+      'readSamsungStepTarget',
+    );
+    return value == null ? null : SamsungStepTarget.fromPlatform(value);
+  }
+
+  static SamsungHealthStatus _statusFromPlatform(String? value) {
+    return switch (value) {
+      'connected' => SamsungHealthStatus.connected,
+      'permissionRequired' => SamsungHealthStatus.permissionRequired,
+      'noTarget' => SamsungHealthStatus.noTarget,
+      'authorizationRequired' => SamsungHealthStatus.authorizationRequired,
+      'notInstalled' => SamsungHealthStatus.notInstalled,
+      'updateRequired' => SamsungHealthStatus.updateRequired,
+      'disabled' => SamsungHealthStatus.disabled,
+      'notInitialized' => SamsungHealthStatus.notInitialized,
+      'unavailable' => SamsungHealthStatus.unavailable,
+      'unsupported' => SamsungHealthStatus.unsupported,
+      _ => SamsungHealthStatus.error,
+    };
   }
 }
 
@@ -234,10 +278,15 @@ class ReminderService {
 }
 
 class MovePreferences {
-  const MovePreferences({required this.goals, required this.quickMovementIds});
+  const MovePreferences({
+    required this.goals,
+    required this.quickMovementIds,
+    required this.cachedSamsungStepTarget,
+  });
 
   final DailyGoalSettings goals;
   final List<String> quickMovementIds;
+  final SamsungStepTarget? cachedSamsungStepTarget;
 
   factory MovePreferences.fromPlatform(Map<Object?, Object?> map) {
     final rawIds = (map['quickMovementIds'] as List<Object?>? ?? const [])
@@ -249,11 +298,23 @@ class MovePreferences {
         validIds.add(id);
       }
     }
+    SamsungStepTarget? cachedSamsungStepTarget;
+    try {
+      if (map.containsKey('cachedSamsungStepGoal')) {
+        cachedSamsungStepTarget = SamsungStepTarget.fromPlatform({
+          'steps': map['cachedSamsungStepGoal'],
+          'date': map['cachedSamsungStepGoalDate'],
+        });
+      }
+    } on FormatException {
+      cachedSamsungStepTarget = null;
+    }
     return MovePreferences(
       goals: DailyGoalSettings.fromPlatform(map),
       quickMovementIds: validIds.length >= 2
           ? validIds.take(8).toList()
           : List.of(MovementCatalog.quickIds),
+      cachedSamsungStepTarget: cachedSamsungStepTarget,
     );
   }
 }
@@ -268,6 +329,7 @@ class MovePreferencesService {
       return MovePreferences(
         goals: DailyGoalSettings.standard,
         quickMovementIds: List.of(MovementCatalog.quickIds),
+        cachedSamsungStepTarget: null,
       );
     }
     final value = await _channel.invokeMapMethod<Object?, Object?>(
@@ -293,6 +355,8 @@ class MovePreferencesService {
     required int steps,
     required int movements,
     required int streak,
+    required int stepGoal,
+    required bool usesSamsungStepGoal,
   }) {
     return _channel.invokeMethod<void>('updateMoveSnapshot', {
       'date':
@@ -302,6 +366,8 @@ class MovePreferencesService {
       'steps': steps,
       'movements': movements,
       'streak': streak,
+      'stepGoal': stepGoal,
+      'usesSamsungStepGoal': usesSamsungStepGoal,
     });
   }
 }

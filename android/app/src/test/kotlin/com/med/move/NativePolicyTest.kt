@@ -52,4 +52,28 @@ class NativePolicyTest {
             MoveStateStore.resolvedStreak(today.minusDays(2), 4, today),
         )
     }
+
+    @Test
+    fun currentSnapshotUsesSamsungStepGoalAndOldSnapshotUsesFallback() {
+        val today = LocalDate.of(2026, 8, 30)
+
+        assertEquals(
+            12000,
+            MoveStateStore.resolvedStepGoal(today, 12000, 8000, true, today),
+        )
+        assertEquals(
+            8000,
+            MoveStateStore.resolvedStepGoal(
+                today.minusDays(1),
+                12000,
+                8000,
+                true,
+                today,
+            ),
+        )
+        assertEquals(
+            8000,
+            MoveStateStore.resolvedStepGoal(today, 12000, 8000, false, today),
+        )
+    }
 }

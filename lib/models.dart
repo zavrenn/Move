@@ -570,6 +570,38 @@ class SamsungSleepTarget {
   static int _wrap(int minutes) => (minutes % 1440 + 1440) % 1440;
 }
 
+class SamsungStepTarget {
+  const SamsungStepTarget({required this.steps, required this.localDate});
+
+  final int steps;
+  final String localDate;
+
+  bool isForLocalDate(DateTime date) => localDate == _localDateKey(date);
+
+  factory SamsungStepTarget.fromPlatform(Map<Object?, Object?> map) {
+    final raw = map['steps'];
+    if (raw is! num ||
+        !raw.isFinite ||
+        raw.toInt() != raw ||
+        raw < 1 ||
+        raw > 1000000) {
+      throw const FormatException('Invalid Samsung Health step target.');
+    }
+    final localDate = map['date'];
+    if (localDate is! String ||
+        !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(localDate) ||
+        DateTime.tryParse(localDate) == null) {
+      throw const FormatException('Invalid Samsung Health step target date.');
+    }
+    return SamsungStepTarget(steps: raw.toInt(), localDate: localDate);
+  }
+
+  static String _localDateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
 class DailyGoalSettings {
   const DailyGoalSettings({required this.stepGoal, required this.movementGoal});
 
@@ -592,6 +624,16 @@ class DailyGoalSettings {
       stepGoal: stepGoal ?? this.stepGoal,
       movementGoal: movementGoal ?? this.movementGoal,
     );
+  }
+
+  DailyGoalSettings resolveStepTarget(
+    SamsungStepTarget? target, {
+    DateTime? localDate,
+  }) {
+    final date = localDate ?? DateTime.now();
+    return target == null || !target.isForLocalDate(date)
+        ? this
+        : copyWith(stepGoal: target.steps);
   }
 
   factory DailyGoalSettings.fromPlatform(Map<Object?, Object?> map) {

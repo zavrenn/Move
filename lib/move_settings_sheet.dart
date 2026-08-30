@@ -37,18 +37,25 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
 
   HealthConnectStatus? _healthStatus;
   HealthConnectStatus? _sleepStatus;
+  SamsungHealthStatus? _stepTargetStatus;
   SamsungHealthStatus? _sleepTargetStatus;
+  SamsungStepTarget? _stepTarget;
   SamsungSleepTarget? _sleepTarget;
   ReminderStatus? _reminderStatus;
   DailyGoalSettings _goals = DailyGoalSettings.standard;
   HomeWidgetStatus? _widgetStatus;
   bool _healthBusy = false;
   bool _sleepBusy = false;
+  bool _stepTargetBusy = false;
   bool _sleepTargetBusy = false;
+  bool _stepTargetFailed = false;
   bool _sleepTargetFailed = false;
   bool _reminderBusy = false;
   bool _goalBusy = false;
   bool _widgetBusy = false;
+
+  SamsungStepTarget? get _currentStepTarget =>
+      _stepTarget?.isForLocalDate(DateTime.now()) == true ? _stepTarget : null;
 
   @override
   void initState() {
@@ -67,6 +74,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadWidgetStatus();
+      _refreshStepTarget();
       _refreshSleepTarget();
     }
   }
@@ -87,9 +95,13 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
         _sleepStatus = values[1] as HealthConnectStatus;
         _reminderStatus = values[2] as ReminderStatus;
         _goals = preferences.goals;
+        _stepTarget = preferences.cachedSamsungStepTarget;
+        if (_stepTarget != null) {
+          _stepTargetStatus = SamsungHealthStatus.connected;
+        }
         _widgetStatus = values[4] as HomeWidgetStatus;
       });
-      await _refreshSleepTarget();
+      await Future.wait([_refreshStepTarget(), _refreshSleepTarget()]);
     } catch (_) {
       if (!mounted) return;
       _showError('Could not load settings.');
@@ -131,6 +143,73 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     } finally {
       if (mounted) setState(() => _sleepBusy = false);
     }
+  }
+
+  Future<void> _refreshStepTarget() async {
+    if (_stepTargetBusy) return;
+    if (mounted) {
+      setState(() {
+        _stepTargetBusy = true;
+        _stepTargetFailed = false;
+      });
+    }
+    try {
+      final status = await _samsungHealth.getStepTargetStatus();
+      if (!mounted) return;
+      if (status == SamsungHealthStatus.error) {
+        setState(() {
+          _stepTargetStatus = status;
+          _stepTargetFailed = true;
+        });
+        return;
+      }
+      setState(() {
+        _stepTargetStatus = status;
+        if (status != SamsungHealthStatus.connected) _stepTarget = null;
+      });
+      if (status != SamsungHealthStatus.connected) return;
+      final target = await _samsungHealth.readStepTarget();
+      if (!mounted) return;
+      setState(() {
+        _stepTarget = target;
+        _stepTargetStatus = target == null
+            ? SamsungHealthStatus.noTarget
+            : SamsungHealthStatus.connected;
+      });
+    } catch (_) {
+      final status = await _samsungHealth.getStepTargetStatus();
+      if (!mounted) return;
+      final targetIsCurrent =
+          _stepTarget?.isForLocalDate(DateTime.now()) == true;
+      final isTransient =
+          status == SamsungHealthStatus.connected ||
+          status == SamsungHealthStatus.error;
+      setState(() {
+        _stepTargetStatus = status;
+        _stepTargetFailed = isTransient;
+        if (!isTransient || !targetIsCurrent) _stepTarget = null;
+      });
+    } finally {
+      if (mounted) setState(() => _stepTargetBusy = false);
+    }
+  }
+
+  Future<void> _connectStepTarget() async {
+    if (_stepTargetBusy) return;
+    final wasPermissionRequest =
+        _stepTargetStatus == SamsungHealthStatus.permissionRequired;
+    setState(() => _stepTargetBusy = true);
+    try {
+      final granted = await _samsungHealth.requestStepTargetPermission();
+      if (!granted && mounted && wasPermissionRequest) {
+        _showError('Step target access was not enabled.');
+      }
+    } catch (_) {
+      if (mounted) _showError('Step target access was not enabled.');
+    } finally {
+      if (mounted) setState(() => _stepTargetBusy = false);
+    }
+    await _refreshStepTarget();
   }
 
   Future<void> _refreshSleepTarget() async {
@@ -308,7 +387,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                 const SizedBox(height: 20),
                 const SectionTitle(
                   title: 'Daily goals',
-                  subtitle: 'Flexible targets for movement and walking',
+                  subtitle: 'Active targets with a configurable Move fallback',
                 ),
                 const SizedBox(height: 10),
                 SurfaceCard(
@@ -338,11 +417,29 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                               )
                             : null,
                       ),
+                      if (_currentStepTarget != null) ...[
+                        const Divider(height: 1),
+                        _GoalSettingRow(
+                          icon: Icons.directions_walk_rounded,
+                          color: MoveColors.secondary,
+                          label: 'Daily steps',
+                          detail: 'Samsung Health · active',
+                          value: NumberFormat.decimalPattern().format(
+                            _currentStepTarget!.steps,
+                          ),
+                          showControls: false,
+                          onDecrease: null,
+                          onIncrease: null,
+                        ),
+                      ],
                       const Divider(height: 1),
                       _GoalSettingRow(
-                        icon: Icons.directions_walk_rounded,
+                        icon: Icons.shield_outlined,
                         color: MoveColors.secondary,
-                        label: 'Daily steps',
+                        label: 'Move fallback',
+                        detail: _currentStepTarget == null
+                            ? 'Active'
+                            : 'Backup',
                         value: NumberFormat.decimalPattern().format(
                           _goals.stepGoal,
                         ),
@@ -502,56 +599,126 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                 const SizedBox(height: 20),
                 const SectionTitle(
                   title: 'Walking & steps',
-                  subtitle: 'Read-only through Health Connect',
+                  subtitle: 'Totals from Health Connect · target from Samsung',
                 ),
                 const SizedBox(height: 10),
                 SurfaceCard(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.fromLTRB(14, 14, 10, 6),
+                  child: Column(
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: MoveColors.secondary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: const Icon(
-                          Icons.directions_walk_rounded,
-                          color: MoveColors.secondary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _healthTitle(_healthStatus),
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _healthDescription(_healthStatus),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            const SizedBox(height: 10),
-                            if (_healthStatus ==
-                                HealthConnectStatus.permissionRequired)
-                              FilledButton.tonalIcon(
-                                onPressed: _healthBusy ? null : _connectSteps,
-                                icon: const Icon(Icons.link_rounded),
-                                label: const Text('Connect steps'),
-                              )
-                            else if (_healthStatus ==
-                                HealthConnectStatus.connected)
-                              TextButton.icon(
-                                onPressed: _health.openSettings,
-                                icon: const Icon(Icons.tune_rounded),
-                                label: const Text('Manage access'),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: MoveColors.secondary.withValues(
+                                alpha: 0.12,
                               ),
-                          ],
-                        ),
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: const Icon(
+                              Icons.directions_walk_rounded,
+                              color: MoveColors.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _healthTitle(_healthStatus),
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _healthDescription(_healthStatus),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 10),
+                                if (_healthStatus ==
+                                    HealthConnectStatus.permissionRequired)
+                                  FilledButton.tonalIcon(
+                                    onPressed: _healthBusy
+                                        ? null
+                                        : _connectSteps,
+                                    icon: const Icon(Icons.link_rounded),
+                                    label: const Text('Connect steps'),
+                                  )
+                                else if (_healthStatus ==
+                                    HealthConnectStatus.connected)
+                                  TextButton.icon(
+                                    onPressed: _health.openSettings,
+                                    icon: const Icon(Icons.tune_rounded),
+                                    label: const Text('Manage access'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 18),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Icon(
+                              Icons.track_changes_rounded,
+                              color: MoveColors.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Step target · Samsung Health',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _stepTargetDescription(),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (_currentStepTarget != null) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Target ${NumberFormat.decimalPattern().format(_currentStepTarget!.steps)} steps',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleSmall,
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                if (_canConnectStepTarget)
+                                  FilledButton.tonalIcon(
+                                    onPressed: _stepTargetBusy
+                                        ? null
+                                        : _connectStepTarget,
+                                    icon: const Icon(Icons.link_rounded),
+                                    label: Text(_stepTargetActionLabel),
+                                  )
+                                else
+                                  TextButton.icon(
+                                    onPressed: _stepTargetBusy
+                                        ? null
+                                        : _refreshStepTarget,
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    label: const Text('Refresh target'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -612,7 +779,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                 const SizedBox(height: 14),
                 Text(
                   'Move reads steps and sleep sessions from Health Connect, '
-                  'plus your sleep target from Samsung Health. It never writes '
+                  'plus your step and sleep targets from Samsung Health. It never writes '
                   'health data, and everything remains on this device.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
@@ -653,6 +820,60 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
       'This device does not currently support Health Connect.',
     HealthConnectStatus.error => 'Try again after reopening Move.',
     null => 'Checking availability and permission status.',
+  };
+
+  String _stepTargetDescription() {
+    final fallback = NumberFormat.decimalPattern().format(_goals.stepGoal);
+    if (_stepTargetBusy) return 'Checking Samsung Health…';
+    if (_stepTargetFailed) {
+      return _currentStepTarget == null
+          ? 'Refresh failed; using the $fallback-step Move fallback.'
+          : 'Refresh failed; still using the last Samsung Health target.';
+    }
+    return switch (_stepTargetStatus) {
+      null => 'Checking availability and permission status.',
+      SamsungHealthStatus.connected =>
+        'Read-only target used for scoring, progress, and reminders.',
+      SamsungHealthStatus.permissionRequired =>
+        'Connect the target; until then Move uses the $fallback-step fallback.',
+      SamsungHealthStatus.noTarget =>
+        'No Samsung target found; using the $fallback-step Move fallback.',
+      SamsungHealthStatus.authorizationRequired =>
+        'Samsung Health did not authorize this build; using the Move fallback.',
+      SamsungHealthStatus.notInstalled =>
+        'Samsung Health is not installed; using the Move fallback.',
+      SamsungHealthStatus.updateRequired =>
+        'Update Samsung Health; until then Move uses its fallback.',
+      SamsungHealthStatus.disabled =>
+        'Samsung Health is disabled; using the Move fallback.',
+      SamsungHealthStatus.notInitialized =>
+        'Finish setting up Samsung Health; using the Move fallback for now.',
+      SamsungHealthStatus.unavailable =>
+        'Samsung Health is unavailable; using the Move fallback.',
+      SamsungHealthStatus.unsupported =>
+        'Samsung step targets are unsupported; using the Move fallback.',
+      SamsungHealthStatus.error =>
+        'Could not check the Samsung target; using the Move fallback.',
+    };
+  }
+
+  bool get _canConnectStepTarget => switch (_stepTargetStatus) {
+    SamsungHealthStatus.permissionRequired ||
+    SamsungHealthStatus.notInstalled ||
+    SamsungHealthStatus.updateRequired ||
+    SamsungHealthStatus.disabled ||
+    SamsungHealthStatus.notInitialized ||
+    SamsungHealthStatus.unavailable => true,
+    _ => false,
+  };
+
+  String get _stepTargetActionLabel => switch (_stepTargetStatus) {
+    SamsungHealthStatus.permissionRequired => 'Connect target',
+    SamsungHealthStatus.notInstalled => 'Install Samsung Health',
+    SamsungHealthStatus.updateRequired => 'Update Samsung Health',
+    SamsungHealthStatus.disabled => 'Enable Samsung Health',
+    SamsungHealthStatus.notInitialized => 'Open Samsung Health',
+    _ => 'Fix Samsung Health',
   };
 
   String _sleepDescription(HealthConnectStatus? status) => switch (status) {
@@ -747,12 +968,16 @@ class _GoalSettingRow extends StatelessWidget {
     required this.value,
     required this.onDecrease,
     required this.onIncrease,
+    this.detail,
+    this.showControls = true,
   });
 
   final IconData icon;
   final Color color;
   final String label;
   final String value;
+  final String? detail;
+  final bool showControls;
   final VoidCallback? onDecrease;
   final VoidCallback? onIncrease;
 
@@ -765,28 +990,46 @@ class _GoalSettingRow extends StatelessWidget {
           Icon(icon, color: color, size: 21),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(label, style: Theme.of(context).textTheme.titleSmall),
-          ),
-          IconButton(
-            onPressed: onDecrease,
-            tooltip: 'Decrease $label',
-            icon: const Icon(Icons.remove_rounded),
-          ),
-          SizedBox(
-            width: 58,
-            child: Text(
-              value,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: Theme.of(context).textTheme.titleSmall),
+                if (detail != null)
+                  Text(detail!, style: Theme.of(context).textTheme.bodySmall),
+              ],
             ),
           ),
-          IconButton(
-            onPressed: onIncrease,
-            tooltip: 'Increase $label',
-            icon: const Icon(Icons.add_rounded),
-          ),
+          if (showControls) ...[
+            IconButton(
+              onPressed: onDecrease,
+              tooltip: 'Decrease $label',
+              icon: const Icon(Icons.remove_rounded),
+            ),
+            SizedBox(
+              width: 58,
+              child: Text(
+                value,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            IconButton(
+              onPressed: onIncrease,
+              tooltip: 'Increase $label',
+              icon: const Icon(Icons.add_rounded),
+            ),
+          ] else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                value,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
         ],
       ),
     );
