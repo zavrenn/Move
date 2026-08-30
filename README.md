@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/media/move-v1.1.1-demo.gif" width="340" alt="Move v1.1.1 app walkthrough on Android">
+  <img src="docs/media/move-v1.1.1-demo.gif" width="340" alt="Move app walkthrough on Android">
 </p>
 
 ## About
@@ -37,7 +37,7 @@ Accounts and cloud synchronization are intentionally outside the current scope.
 
 ## Download
 
-Download the latest Android APK from [GitHub Releases](https://github.com/zavrenn/Move/releases/latest). Move supports Android 10 (API 29) and newer. Automatic steps and actual sleep sessions require Health Connect; Samsung Health supplies step and sleep targets when connected.
+Download the latest Android APK from [GitHub Releases](https://github.com/zavrenn/Move/releases/latest). Move supports Android 10 (API 29) and newer. Automatic steps and actual sleep sessions require Health Connect; Samsung Health supplies step and sleep targets when connected. Smart Movement Alerts require Android 14 or newer plus Health Connect background access.
 
 ## Run locally
 
@@ -80,6 +80,8 @@ lib/
 
 android/app/src/main/kotlin/com/med/move/
 ├── MainActivity.kt             Health Connect, Samsung Health, and Flutter bridge
+├── SmartAlertDataSource.kt     Background steps, goals, and active-hour inputs
+├── SmartAlertPolicy.kt         Inactivity, cooldown, and alert decisions
 ├── ReminderScheduler.kt        Adaptive inactivity checks and alert delivery
 ├── MoveStateStore.kt           Shared goal, widget, and alert state
 └── MoveWidgetProvider.kt       Native home-screen widget
