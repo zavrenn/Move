@@ -6,8 +6,9 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.icu.text.CompactDecimalFormat
 import android.widget.RemoteViews
-import java.text.NumberFormat
+import java.util.Locale
 
 class MoveWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -45,7 +46,10 @@ class MoveWidgetProvider : AppWidgetProvider() {
             widgetId: Int,
         ) {
             val snapshot = MoveStateStore.snapshot(context)
-            val formatter = NumberFormat.getIntegerInstance()
+            val compactFormatter = CompactDecimalFormat.getInstance(
+                Locale.US,
+                CompactDecimalFormat.CompactStyle.SHORT,
+            )
             val views = RemoteViews(context.packageName, R.layout.move_widget).apply {
                 setTextViewText(
                     R.id.widget_streak,
@@ -53,11 +57,12 @@ class MoveWidgetProvider : AppWidgetProvider() {
                 )
                 setTextViewText(
                     R.id.widget_movements,
-                    "${snapshot.movements} / ${snapshot.movementGoal} sets",
+                    "${snapshot.movements} / ${snapshot.movementGoal}",
                 )
                 setTextViewText(
                     R.id.widget_steps,
-                    "${formatter.format(snapshot.steps)} / ${formatter.format(snapshot.stepGoal)}",
+                    "${compactFormatter.format(snapshot.steps)} / " +
+                        compactFormatter.format(snapshot.stepGoal),
                 )
                 setProgressBar(
                     R.id.widget_movement_progress,

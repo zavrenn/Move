@@ -8,7 +8,10 @@
     android:focusable="true"
     android:gravity="center_vertical"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:paddingStart="12dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="8dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -17,20 +20,21 @@
         android:orientation="horizontal">
 
         <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
             android:contentDescription="@string/move_widget_icon_description"
             android:src="@mipmap/ic_launcher" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="5dp"
             android:fontFamily="sans-serif-medium"
-            android:letterSpacing="0.14"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.12"
             android:text="MOVE"
             android:textColor="#F1F5F0"
-            android:textSize="12sp" />
+            android:textSize="10sp" />
 
         <TextView
             android:id="@+id/widget_streak"
@@ -38,86 +42,112 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
             android:text="Today"
             android:textColor="#C5F65A"
-            android:textSize="10sp" />
+            android:textSize="9sp" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:layout_marginTop="5dp"
+        android:orientation="vertical">
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="5dp"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
                 android:text="MOVEMENT"
                 android:textColor="#9CA89F"
                 android:textSize="8sp" />
 
             <TextView
                 android:id="@+id/widget_movements"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:autoSizeMaxTextSize="12sp"
+                android:autoSizeMinTextSize="9sp"
+                android:autoSizeStepGranularity="1sp"
+                android:autoSizeTextType="uniform"
+                android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
-                android:text="0 / 3 sets"
+                android:gravity="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="0 / 3"
                 android:textColor="#F1F5F0"
-                android:textSize="13sp" />
-
-            <ProgressBar
-                android:id="@+id/widget_movement_progress"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="4dp"
-                android:layout_marginTop="4dp"
-                android:indeterminate="false"
-                android:progressDrawable="@drawable/widget_progress_lime" />
+                android:textSize="12sp" />
         </LinearLayout>
 
+        <ProgressBar
+            android:id="@+id/widget_movement_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="2dp"
+            android:indeterminate="false"
+            android:progressDrawable="@drawable/widget_progress_lime" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:orientation="vertical">
+
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="5dp"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
                 android:text="STEPS"
                 android:textColor="#9CA89F"
                 android:textSize="8sp" />
 
             <TextView
                 android:id="@+id/widget_steps"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:autoSizeMaxTextSize="12sp"
+                android:autoSizeMinTextSize="9sp"
+                android:autoSizeStepGranularity="1sp"
+                android:autoSizeTextType="uniform"
+                android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
-                android:text="0 / 8,000"
+                android:gravity="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="0 / 8K"
                 android:textColor="#F1F5F0"
-                android:textSize="13sp" />
-
-            <ProgressBar
-                android:id="@+id/widget_step_progress"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="4dp"
-                android:layout_marginTop="4dp"
-                android:indeterminate="false"
-                android:progressDrawable="@drawable/widget_progress_teal" />
+                android:textSize="12sp" />
         </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/widget_step_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="2dp"
+            android:indeterminate="false"
+            android:progressDrawable="@drawable/widget_progress_teal" />
     </LinearLayout>
 </LinearLayout>

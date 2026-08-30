@@ -85,7 +85,7 @@ class DashboardScreen extends StatelessWidget {
         onRefresh: onRefreshHealthData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 104),
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 104),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -93,7 +93,7 @@ class DashboardScreen extends StatelessWidget {
                 streak: activity.currentStreak,
                 onSettings: onOpenSettings,
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               Text(
                 'Keep your body in motion.',
                 maxLines: 1,
@@ -108,7 +108,7 @@ class DashboardScreen extends StatelessWidget {
                 DateFormat('EEEE, d MMMM').format(DateTime.now()),
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               _RhythmScoreCard(
                 score: rhythmScore,
                 sleepActivity: sleepAnalytics.todayActivity,
@@ -128,7 +128,7 @@ class DashboardScreen extends StatelessWidget {
                 onConnectSleep: onConnectSleep,
                 onConnectSleepTarget: onConnectSleepTarget,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               _TodayCard(
                 analytics: analytics,
                 stepAnalytics: stepAnalytics,
@@ -142,7 +142,7 @@ class DashboardScreen extends StatelessWidget {
                 const SizedBox(height: 10),
                 _StepsSetupCard(onConnect: onConnectSteps),
               ],
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
               const SectionTitle(
                 title: 'This week',
                 subtitle: 'Every logged set keeps the rhythm going',
@@ -152,7 +152,7 @@ class DashboardScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
                 child: WeekBarChart(days: analytics.lastSevenDays),
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
               SectionTitle(
                 title: 'Quick move',
                 subtitle: 'Your most useful room-friendly movements',
@@ -180,7 +180,7 @@ class DashboardScreen extends StatelessWidget {
                   );
                 },
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
               SectionTitle(
                 title: 'Recent activity',
                 subtitle: recent.isEmpty
@@ -347,7 +347,7 @@ class _RhythmScoreCard extends StatelessWidget {
     );
 
     return SurfaceCard(
-      padding: const EdgeInsets.all(17),
+      padding: const EdgeInsets.all(14),
       borderColor: MoveColors.primary.withValues(alpha: 0.25),
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
@@ -382,59 +382,36 @@ class _RhythmScoreCard extends StatelessWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 7),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final scoreSummary = _RhythmScoreSummary(
+                total: total,
+                label: total == null
+                    ? _waitingLabel(
+                        missingSteps: missingSteps,
+                        missingSleep: missingSleep,
+                      )
+                    : 'out of 100',
+              );
+              final metrics = _RhythmMetrics(score: score);
+              if (constraints.maxWidth < 320) {
+                return Column(
+                  children: [scoreSummary, const SizedBox(height: 8), metrics],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(flex: 5, child: scoreSummary),
+                  const SizedBox(width: 8),
+                  Container(width: 1, height: 42, color: MoveColors.border),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 6, child: metrics),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                total == null ? '—' : '$total',
-                style: Theme.of(
-                  context,
-                ).textTheme.displaySmall?.copyWith(fontSize: 44),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(left: 7, bottom: 5),
-                child: Text(
-                  total == null
-                      ? _waitingLabel(
-                          missingSteps: missingSteps,
-                          missingSleep: missingSleep,
-                        )
-                      : 'out of 100',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _RhythmMetric(
-                  label: 'MOVES',
-                  points: score.movementPoints,
-                  color: MoveColors.primary,
-                ),
-              ),
-              Container(width: 1, height: 34, color: MoveColors.border),
-              Expanded(
-                child: _RhythmMetric(
-                  label: 'STEPS',
-                  points: score.stepPoints,
-                  color: MoveColors.secondary,
-                ),
-              ),
-              Container(width: 1, height: 34, color: MoveColors.border),
-              Expanded(
-                child: _RhythmMetric(
-                  label: 'SLEEP',
-                  points: score.sleepPoints,
-                  color: MoveColors.sleep,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
           if (total == null) ...[
             Text(missingMessage, style: Theme.of(context).textTheme.bodySmall),
             if ((missingSteps &&
@@ -500,7 +477,7 @@ class _RhythmScoreCard extends StatelessWidget {
             ),
           ],
           if (sleepSyncFailed && sleep != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               'Health Connect refresh failed · showing cached sleep timing',
               style: Theme.of(
@@ -509,7 +486,7 @@ class _RhythmScoreCard extends StatelessWidget {
             ),
           ],
           if (stepSyncFailed && score.stepProgress != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               'Steps refresh failed · showing cached total',
               style: Theme.of(
@@ -658,6 +635,74 @@ class _RhythmScoreCard extends StatelessWidget {
   };
 }
 
+class _RhythmScoreSummary extends StatelessWidget {
+  const _RhythmScoreSummary({required this.total, required this.label});
+
+  final int? total;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          total == null ? '—' : '$total',
+          style: Theme.of(
+            context,
+          ).textTheme.displaySmall?.copyWith(fontSize: 40),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RhythmMetrics extends StatelessWidget {
+  const _RhythmMetrics({required this.score});
+
+  final RhythmScore score;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _RhythmMetric(
+            label: 'MOVES',
+            points: score.movementPoints,
+            color: MoveColors.primary,
+          ),
+        ),
+        Container(width: 1, height: 30, color: MoveColors.border),
+        Expanded(
+          child: _RhythmMetric(
+            label: 'STEPS',
+            points: score.stepPoints,
+            color: MoveColors.secondary,
+          ),
+        ),
+        Container(width: 1, height: 30, color: MoveColors.border),
+        Expanded(
+          child: _RhythmMetric(
+            label: 'SLEEP',
+            points: score.sleepPoints,
+            color: MoveColors.sleep,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _RhythmMetric extends StatelessWidget {
   const _RhythmMetric({
     required this.label,
@@ -713,11 +758,11 @@ class _TodayCard extends StatelessWidget {
       child: Stack(
         children: [
           Positioned(
-            right: -36,
-            top: -55,
+            right: -28,
+            top: -42,
             child: Container(
-              width: 140,
-              height: 140,
+              width: 108,
+              height: 108,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: MoveColors.primary.withValues(alpha: 0.055),
@@ -725,7 +770,7 @@ class _TodayCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -748,63 +793,53 @@ class _TodayCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                     ],
-                    const Icon(Icons.bolt_rounded, color: MoveColors.primary),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '$sets',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.displaySmall?.copyWith(fontSize: 46),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 7, bottom: 5),
-                      child: Text(
-                        'set${sets == 1 ? '' : 's'} logged',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                    const Icon(
+                      Icons.bolt_rounded,
+                      color: MoveColors.primary,
+                      size: 22,
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _TodayMetric(
-                        icon: Icons.repeat_rounded,
-                        value: '${analytics.todayReps}',
-                        label: 'reps',
-                      ),
-                    ),
-                    Container(width: 1, height: 32, color: MoveColors.border),
-                    Expanded(
-                      child: _TodayMetric(
-                        icon: Icons.timer_outlined,
-                        value: formatCompactDuration(analytics.todaySeconds),
-                        label: 'duration',
-                      ),
-                    ),
-                    Container(width: 1, height: 32, color: MoveColors.border),
-                    Expanded(
-                      child: _TodayMetric(
-                        icon: Icons.directions_walk_rounded,
-                        value: showCachedSteps
-                            ? NumberFormat.compact().format(
-                                stepAnalytics.todaySteps,
-                              )
-                            : '—',
-                        label: 'steps',
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final setSummary = _TodaySetSummary(sets: sets);
+                    final metrics = _TodayMetrics(
+                      reps: analytics.todayReps,
+                      duration: formatCompactDuration(analytics.todaySeconds),
+                      steps: showCachedSteps
+                          ? NumberFormat.compact().format(
+                              stepAnalytics.todaySteps,
+                            )
+                          : '—',
+                    );
+                    if (constraints.maxWidth < 320) {
+                      return Column(
+                        children: [
+                          setSummary,
+                          const SizedBox(height: 8),
+                          metrics,
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(flex: 4, child: setSummary),
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 1,
+                          height: 42,
+                          color: MoveColors.border,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(flex: 7, child: metrics),
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 15),
+                const SizedBox(height: 10),
                 Container(height: 1, color: MoveColors.border),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
@@ -816,7 +851,7 @@ class _TodayCard extends StatelessWidget {
                         color: MoveColors.primary,
                       ),
                     ),
-                    const SizedBox(width: 18),
+                    const SizedBox(width: 14),
                     Expanded(
                       child: _InlineGoalProgress(
                         icon: Icons.directions_walk_rounded,
@@ -936,6 +971,78 @@ class _StepsSetupCard extends StatelessWidget {
   }
 }
 
+class _TodaySetSummary extends StatelessWidget {
+  const _TodaySetSummary({required this.sets});
+
+  final int sets;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          '$sets',
+          style: Theme.of(
+            context,
+          ).textTheme.displaySmall?.copyWith(fontSize: 40),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            'set${sets == 1 ? '' : 's'} logged',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TodayMetrics extends StatelessWidget {
+  const _TodayMetrics({
+    required this.reps,
+    required this.duration,
+    required this.steps,
+  });
+
+  final int reps;
+  final String duration;
+  final String steps;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _TodayMetric(
+            icon: Icons.repeat_rounded,
+            value: '$reps',
+            label: 'reps',
+          ),
+        ),
+        Container(width: 1, height: 30, color: MoveColors.border),
+        Expanded(
+          child: _TodayMetric(
+            icon: Icons.timer_outlined,
+            value: duration,
+            label: 'duration',
+          ),
+        ),
+        Container(width: 1, height: 30, color: MoveColors.border),
+        Expanded(
+          child: _TodayMetric(
+            icon: Icons.directions_walk_rounded,
+            value: steps,
+            label: 'steps',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _TodayMetric extends StatelessWidget {
   const _TodayMetric({
     required this.icon,
@@ -949,21 +1056,29 @@ class _TodayMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 19, color: MoveColors.secondary),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            Icon(icon, size: 15, color: MoveColors.secondary),
+            const SizedBox(width: 3),
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
             ),
-            Text(label, style: Theme.of(context).textTheme.labelSmall),
           ],
         ),
+        const SizedBox(height: 2),
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
       ],
     );
   }
