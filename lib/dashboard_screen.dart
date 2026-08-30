@@ -14,19 +14,23 @@ class DashboardScreen extends StatelessWidget {
     required this.steps,
     required this.sleep,
     required this.goals,
-    required this.sleepSchedule,
+    required this.sleepTarget,
     required this.quickMovements,
     required this.healthStatus,
     required this.sleepStatus,
+    required this.sleepTargetStatus,
     required this.syncingSteps,
     required this.syncingSleep,
+    required this.syncingSleepTarget,
     required this.stepSyncFailed,
     required this.sleepSyncFailed,
+    required this.sleepTargetSyncFailed,
     required this.onLog,
     required this.onEdit,
     required this.onOpenHistory,
     required this.onConnectSteps,
     required this.onConnectSleep,
+    required this.onConnectSleepTarget,
     required this.onRefreshHealthData,
     required this.onOpenSettings,
     required this.onCustomizeQuickMoves,
@@ -36,19 +40,23 @@ class DashboardScreen extends StatelessWidget {
   final List<DailyStepCount> steps;
   final List<DailySleepRecord> sleep;
   final DailyGoalSettings goals;
-  final SleepScheduleSettings sleepSchedule;
+  final SamsungSleepTarget? sleepTarget;
   final List<MovementDefinition> quickMovements;
   final HealthConnectStatus? healthStatus;
   final HealthConnectStatus? sleepStatus;
+  final SamsungHealthStatus? sleepTargetStatus;
   final bool syncingSteps;
   final bool syncingSleep;
+  final bool syncingSleepTarget;
   final bool stepSyncFailed;
   final bool sleepSyncFailed;
+  final bool sleepTargetSyncFailed;
   final ValueChanged<MovementDefinition> onLog;
   final ValueChanged<MovementLog> onEdit;
   final VoidCallback onOpenHistory;
   final Future<void> Function() onConnectSteps;
   final Future<void> Function() onConnectSleep;
+  final Future<void> Function() onConnectSleepTarget;
   final Future<void> Function() onRefreshHealthData;
   final VoidCallback onOpenSettings;
   final VoidCallback onCustomizeQuickMoves;
@@ -57,7 +65,7 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final analytics = MoveAnalytics(logs);
     final stepAnalytics = StepAnalytics(steps);
-    final sleepAnalytics = SleepAnalytics(sleep, sleepSchedule);
+    final sleepAnalytics = SleepAnalytics(sleep, sleepTarget);
     final activity = ActivityAnalytics(
       movements: analytics,
       steps: stepAnalytics,
@@ -104,14 +112,21 @@ class DashboardScreen extends StatelessWidget {
               _RhythmScoreCard(
                 score: rhythmScore,
                 sleepActivity: sleepAnalytics.todayActivity,
+                hasSleepSession:
+                    sleepAnalytics.sleepOn(sleepAnalytics.today) != null,
+                hasSleepTarget: sleepTarget != null,
                 stepStatus: healthStatus,
                 sleepStatus: sleepStatus,
+                sleepTargetStatus: sleepTargetStatus,
                 syncingSteps: syncingSteps,
                 syncingSleep: syncingSleep,
+                syncingSleepTarget: syncingSleepTarget,
                 stepSyncFailed: stepSyncFailed,
                 sleepSyncFailed: sleepSyncFailed,
+                sleepTargetSyncFailed: sleepTargetSyncFailed,
                 onConnectSteps: onConnectSteps,
                 onConnectSleep: onConnectSleep,
+                onConnectSleepTarget: onConnectSleepTarget,
               ),
               const SizedBox(height: 10),
               _TodayCard(
@@ -282,26 +297,38 @@ class _RhythmScoreCard extends StatelessWidget {
   const _RhythmScoreCard({
     required this.score,
     required this.sleepActivity,
+    required this.hasSleepSession,
+    required this.hasSleepTarget,
     required this.stepStatus,
     required this.sleepStatus,
+    required this.sleepTargetStatus,
     required this.syncingSteps,
     required this.syncingSleep,
+    required this.syncingSleepTarget,
     required this.stepSyncFailed,
     required this.sleepSyncFailed,
+    required this.sleepTargetSyncFailed,
     required this.onConnectSteps,
     required this.onConnectSleep,
+    required this.onConnectSleepTarget,
   });
 
   final RhythmScore score;
   final SleepDayActivity? sleepActivity;
+  final bool hasSleepSession;
+  final bool hasSleepTarget;
   final HealthConnectStatus? stepStatus;
   final HealthConnectStatus? sleepStatus;
+  final SamsungHealthStatus? sleepTargetStatus;
   final bool syncingSteps;
   final bool syncingSleep;
+  final bool syncingSleepTarget;
   final bool stepSyncFailed;
   final bool sleepSyncFailed;
+  final bool sleepTargetSyncFailed;
   final Future<void> Function() onConnectSteps;
   final Future<void> Function() onConnectSleep;
+  final Future<void> Function() onConnectSleepTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -309,10 +336,14 @@ class _RhythmScoreCard extends StatelessWidget {
     final sleep = sleepActivity;
     final missingSteps = score.stepProgress == null;
     final missingSleep = score.sleepProgress == null;
-    final syncing = syncingSteps || syncingSleep;
+    final missingSleepSession = !hasSleepSession;
+    final missingSleepTarget = !hasSleepTarget;
+    final syncing = syncingSteps || syncingSleep || syncingSleepTarget;
     final missingMessage = _missingMessage(
       missingSteps: missingSteps,
       missingSleep: missingSleep,
+      missingSleepSession: missingSleepSession,
+      missingSleepTarget: missingSleepTarget,
     );
 
     return SurfaceCard(
@@ -408,8 +439,9 @@ class _RhythmScoreCard extends StatelessWidget {
             Text(missingMessage, style: Theme.of(context).textTheme.bodySmall),
             if ((missingSteps &&
                     stepStatus == HealthConnectStatus.permissionRequired) ||
-                (missingSleep &&
-                    sleepStatus == HealthConnectStatus.permissionRequired)) ...[
+                (missingSleepSession &&
+                    sleepStatus == HealthConnectStatus.permissionRequired) ||
+                (missingSleepTarget && _canConnectSleepTarget)) ...[
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
@@ -422,12 +454,20 @@ class _RhythmScoreCard extends StatelessWidget {
                       icon: const Icon(Icons.directions_walk_rounded),
                       label: const Text('Connect steps'),
                     ),
-                  if (missingSleep &&
+                  if (missingSleepSession &&
                       sleepStatus == HealthConnectStatus.permissionRequired)
                     FilledButton.tonalIcon(
                       onPressed: syncingSleep ? null : () => onConnectSleep(),
                       icon: const Icon(Icons.bedtime_rounded),
-                      label: const Text('Connect sleep'),
+                      label: const Text('Connect sleep sessions'),
+                    ),
+                  if (missingSleepTarget && _canConnectSleepTarget)
+                    FilledButton.tonalIcon(
+                      onPressed: syncingSleepTarget
+                          ? null
+                          : () => onConnectSleepTarget(),
+                      icon: const Icon(Icons.bedtime_rounded),
+                      label: Text(_sleepTargetActionLabel),
                     ),
                 ],
               ),
@@ -462,7 +502,7 @@ class _RhythmScoreCard extends StatelessWidget {
           if (sleepSyncFailed && sleep != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Sleep refresh failed · showing cached timing',
+              'Health Connect refresh failed · showing cached sleep timing',
               style: Theme.of(
                 context,
               ).textTheme.labelSmall?.copyWith(color: MoveColors.danger),
@@ -494,7 +534,20 @@ class _RhythmScoreCard extends StatelessWidget {
   String _missingMessage({
     required bool missingSteps,
     required bool missingSleep,
+    required bool missingSleepSession,
+    required bool missingSleepTarget,
   }) {
+    if (missingSleepTarget) {
+      final targetMessage = _missingTargetMessage();
+      return [
+        if (missingSteps)
+          stepSyncFailed
+              ? 'Daily steps could not be refreshed.'
+              : 'Today’s steps are missing.',
+        if (missingSleepSession) _missingSessionMessage(),
+        targetMessage,
+      ].join(' ');
+    }
     if (missingSteps && missingSleep) {
       if (stepSyncFailed && sleepSyncFailed) {
         return 'Steps and sleep timing could not be refreshed.';
@@ -530,24 +583,79 @@ class _RhythmScoreCard extends StatelessWidget {
         HealthConnectStatus.error => 'Daily steps could not be refreshed.',
       };
     }
+    return _missingSessionMessage();
+  }
+
+  String _missingSessionMessage() {
     if (sleepSyncFailed) {
-      return 'Sleep timing could not be refreshed. Pull to try again.';
+      return 'Health Connect sleep sessions could not be refreshed. Pull to try again.';
     }
     return switch (sleepStatus) {
       null => 'Checking last night’s sleep rhythm…',
       HealthConnectStatus.connected =>
         syncingSleep
             ? 'Refreshing last night’s sleep rhythm…'
-            : 'No main sleep session found for today.',
+            : 'No main sleep session found in Health Connect for today.',
       HealthConnectStatus.permissionRequired =>
         'Connect sleep timing to complete today’s score.',
       HealthConnectStatus.updateRequired =>
         'Health Connect needs an update before sleep can sync.',
       HealthConnectStatus.unsupported =>
         'Sleep timing is unavailable on this device.',
-      HealthConnectStatus.error => 'Sleep timing could not be refreshed.',
+      HealthConnectStatus.error =>
+        'Health Connect sleep sessions could not be refreshed.',
     };
   }
+
+  String _missingTargetMessage() {
+    if (sleepTargetSyncFailed) {
+      return 'Samsung Health sleep target could not be refreshed. Pull to try again.';
+    }
+    return switch (sleepTargetStatus) {
+      null => 'Checking your Samsung Health sleep target…',
+      SamsungHealthStatus.connected =>
+        syncingSleepTarget
+            ? 'Refreshing your Samsung Health sleep target…'
+            : 'No sleep target found in Samsung Health.',
+      SamsungHealthStatus.permissionRequired =>
+        'Connect Samsung Health to use your sleep target.',
+      SamsungHealthStatus.noTarget =>
+        'No sleep target found in Samsung Health.',
+      SamsungHealthStatus.authorizationRequired =>
+        'Enable Samsung Health Developer Mode to read the sleep target.',
+      SamsungHealthStatus.notInstalled => 'Samsung Health is not installed.',
+      SamsungHealthStatus.updateRequired =>
+        'Samsung Health must be updated before the target can sync.',
+      SamsungHealthStatus.disabled => 'Samsung Health is disabled.',
+      SamsungHealthStatus.notInitialized =>
+        'Finish setting up Samsung Health before the target can sync.',
+      SamsungHealthStatus.unavailable =>
+        'Samsung Health sleep target is unavailable.',
+      SamsungHealthStatus.unsupported =>
+        'Samsung Health sleep targets are unsupported on this device.',
+      SamsungHealthStatus.error =>
+        'Samsung Health sleep target could not be refreshed.',
+    };
+  }
+
+  bool get _canConnectSleepTarget => switch (sleepTargetStatus) {
+    SamsungHealthStatus.permissionRequired ||
+    SamsungHealthStatus.notInstalled ||
+    SamsungHealthStatus.updateRequired ||
+    SamsungHealthStatus.disabled ||
+    SamsungHealthStatus.notInitialized ||
+    SamsungHealthStatus.unavailable => true,
+    _ => false,
+  };
+
+  String get _sleepTargetActionLabel => switch (sleepTargetStatus) {
+    SamsungHealthStatus.permissionRequired => 'Connect sleep target',
+    SamsungHealthStatus.notInstalled => 'Install Samsung Health',
+    SamsungHealthStatus.updateRequired => 'Update Samsung Health',
+    SamsungHealthStatus.disabled => 'Enable Samsung Health',
+    SamsungHealthStatus.notInitialized => 'Open Samsung Health',
+    _ => 'Fix Samsung Health',
+  };
 }
 
 class _RhythmMetric extends StatelessWidget {

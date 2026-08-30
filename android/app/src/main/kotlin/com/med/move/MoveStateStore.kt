@@ -8,10 +8,6 @@ object MoveStateStore {
     private const val KEY_STEP_GOAL = "step_goal"
     private const val KEY_MOVEMENT_GOAL = "movement_goal"
     private const val KEY_QUICK_IDS = "quick_movement_ids"
-    private const val KEY_BEDTIME_START_MINUTES = "bedtime_start_minutes"
-    private const val KEY_BEDTIME_END_MINUTES = "bedtime_end_minutes"
-    private const val KEY_WAKE_START_MINUTES = "wake_start_minutes"
-    private const val KEY_WAKE_END_MINUTES = "wake_end_minutes"
     private const val KEY_SNAPSHOT_DATE = "snapshot_date"
     private const val KEY_TODAY_STEPS = "today_steps"
     private const val KEY_TODAY_MOVEMENTS = "today_movements"
@@ -21,10 +17,6 @@ object MoveStateStore {
 
     const val DEFAULT_STEP_GOAL = 8000
     const val DEFAULT_MOVEMENT_GOAL = 3
-    const val DEFAULT_BEDTIME_START_MINUTES = 23 * 60
-    const val DEFAULT_BEDTIME_END_MINUTES = 0
-    const val DEFAULT_WAKE_START_MINUTES = 7 * 60
-    const val DEFAULT_WAKE_END_MINUTES = 8 * 60
 
     private val defaultQuickIds = listOf(
         "squat",
@@ -54,22 +46,6 @@ object MoveStateStore {
             "stepGoal" to prefs.getInt(KEY_STEP_GOAL, DEFAULT_STEP_GOAL),
             "movementGoal" to prefs.getInt(KEY_MOVEMENT_GOAL, DEFAULT_MOVEMENT_GOAL),
             "quickMovementIds" to quickMovementIds(context),
-            "bedtimeStartMinutes" to prefs.getInt(
-                KEY_BEDTIME_START_MINUTES,
-                DEFAULT_BEDTIME_START_MINUTES,
-            ),
-            "bedtimeEndMinutes" to prefs.getInt(
-                KEY_BEDTIME_END_MINUTES,
-                DEFAULT_BEDTIME_END_MINUTES,
-            ),
-            "wakeStartMinutes" to prefs.getInt(
-                KEY_WAKE_START_MINUTES,
-                DEFAULT_WAKE_START_MINUTES,
-            ),
-            "wakeEndMinutes" to prefs.getInt(
-                KEY_WAKE_END_MINUTES,
-                DEFAULT_WAKE_END_MINUTES,
-            ),
         )
     }
 
@@ -88,22 +64,6 @@ object MoveStateStore {
         preferences(context).edit()
             .putString(KEY_QUICK_IDS, clean.joinToString(QUICK_ID_SEPARATOR))
             .apply()
-    }
-
-    fun setSleepSchedule(
-        context: Context,
-        bedtimeStartMinutes: Int,
-        bedtimeEndMinutes: Int,
-        wakeStartMinutes: Int,
-        wakeEndMinutes: Int,
-    ): Map<String, Any> {
-        preferences(context).edit()
-            .putInt(KEY_BEDTIME_START_MINUTES, bedtimeStartMinutes.coerceIn(0, 1439))
-            .putInt(KEY_BEDTIME_END_MINUTES, bedtimeEndMinutes.coerceIn(0, 1439))
-            .putInt(KEY_WAKE_START_MINUTES, wakeStartMinutes.coerceIn(0, 1439))
-            .putInt(KEY_WAKE_END_MINUTES, wakeEndMinutes.coerceIn(0, 1439))
-            .apply()
-        return preferencesMap(context)
     }
 
     fun updateSnapshot(

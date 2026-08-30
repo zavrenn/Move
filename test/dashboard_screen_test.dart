@@ -24,6 +24,12 @@ void main() {
     required List<DailySleepRecord> sleep,
     required bool sleepSyncFailed,
     bool stepSyncFailed = false,
+    SamsungSleepTarget? sleepTarget = const SamsungSleepTarget(
+      bedtimeMinutes: 23 * 60 + 30,
+      wakeMinutes: 7 * 60 + 30,
+    ),
+    SamsungHealthStatus sleepTargetStatus = SamsungHealthStatus.connected,
+    bool sleepTargetSyncFailed = false,
   }) {
     return MaterialApp(
       theme: ThemeData.dark(),
@@ -33,19 +39,23 @@ void main() {
           steps: steps,
           sleep: sleep,
           goals: DailyGoalSettings.standard,
-          sleepSchedule: SleepScheduleSettings.standard,
+          sleepTarget: sleepTarget,
           quickMovements: const [],
           healthStatus: HealthConnectStatus.connected,
           sleepStatus: HealthConnectStatus.connected,
+          sleepTargetStatus: sleepTargetStatus,
           syncingSteps: false,
           syncingSleep: false,
+          syncingSleepTarget: false,
           stepSyncFailed: stepSyncFailed,
           sleepSyncFailed: sleepSyncFailed,
+          sleepTargetSyncFailed: sleepTargetSyncFailed,
           onLog: (_) {},
           onEdit: (_) {},
           onOpenHistory: () {},
           onConnectSteps: () async {},
           onConnectSleep: () async {},
+          onConnectSleepTarget: () async {},
           onRefreshHealthData: () async {},
           onOpenSettings: () {},
           onCustomizeQuickMoves: () {},
@@ -74,10 +84,15 @@ void main() {
     );
 
     expect(
-      find.text('Sleep timing could not be refreshed. Pull to try again.'),
+      find.text(
+        'Health Connect sleep sessions could not be refreshed. Pull to try again.',
+      ),
       findsOneWidget,
     );
-    expect(find.text('No main sleep session found for today.'), findsNothing);
+    expect(
+      find.text('No main sleep session found in Health Connect for today.'),
+      findsNothing,
+    );
   });
 
   testWidgets('step read failure is distinct from no total', (tester) async {
@@ -106,7 +121,79 @@ void main() {
     );
 
     expect(
-      find.text('Sleep refresh failed · showing cached timing'),
+      find.text('Health Connect refresh failed · showing cached sleep timing'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('missing Samsung target is distinct from a missing session', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      dashboard(
+        steps: [zeroSteps()],
+        sleep: [sleep()],
+        sleepTarget: null,
+        sleepTargetStatus: SamsungHealthStatus.noTarget,
+        sleepSyncFailed: false,
+      ),
+    );
+
+    expect(
+      find.text('No sleep target found in Samsung Health.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('No main sleep session found in Health Connect for today.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Samsung target failure is distinct from no configured target', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      dashboard(
+        steps: [zeroSteps()],
+        sleep: [sleep()],
+        sleepTarget: null,
+        sleepTargetStatus: SamsungHealthStatus.error,
+        sleepTargetSyncFailed: true,
+        sleepSyncFailed: false,
+      ),
+    );
+
+    expect(
+      find.text(
+        'Samsung Health sleep target could not be refreshed. Pull to try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('No sleep target found in Samsung Health.'), findsNothing);
+  });
+
+  testWidgets('both sleep sources report failures together', (tester) async {
+    await tester.pumpWidget(
+      dashboard(
+        steps: [zeroSteps()],
+        sleep: const [],
+        sleepTarget: null,
+        sleepTargetStatus: SamsungHealthStatus.error,
+        sleepTargetSyncFailed: true,
+        sleepSyncFailed: true,
+      ),
+    );
+
+    expect(
+      find.textContaining(
+        'Health Connect sleep sessions could not be refreshed.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'Samsung Health sleep target could not be refreshed.',
+      ),
       findsOneWidget,
     );
   });

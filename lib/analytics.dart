@@ -97,13 +97,13 @@ class SleepDayActivity {
 }
 
 class SleepAnalytics {
-  SleepAnalytics(this.values, this.schedule, {DateTime? now})
+  SleepAnalytics(this.values, this.target, {DateTime? now})
     : now = now ?? DateTime.now();
 
   static const maxScoredDriftMinutes = 180;
 
   final List<DailySleepRecord> values;
-  final SleepScheduleSettings schedule;
+  final SamsungSleepTarget? target;
   final DateTime now;
 
   DateTime get today => DateTime(now.year, now.month, now.day);
@@ -118,9 +118,10 @@ class SleepAnalytics {
 
   SleepDayActivity? activityOn(DateTime date) {
     final record = sleepOn(date);
-    if (record == null) return null;
-    final bedtimeDrift = schedule.bedtimeDrift(record.sleepStart);
-    final wakeDrift = schedule.wakeDrift(record.sleepEnd);
+    final sleepTarget = target;
+    if (record == null || sleepTarget == null) return null;
+    final bedtimeDrift = sleepTarget.bedtimeDrift(record.sleepStart);
+    final wakeDrift = sleepTarget.wakeDrift(record.sleepEnd);
     final combined = math
         .sqrt((bedtimeDrift * bedtimeDrift + wakeDrift * wakeDrift) / 2)
         .round();

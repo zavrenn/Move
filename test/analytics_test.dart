@@ -4,6 +4,10 @@ import 'package:move/models.dart';
 
 void main() {
   final now = DateTime(2026, 8, 25, 12);
+  const target = SamsungSleepTarget(
+    bedtimeMinutes: 23 * 60 + 30,
+    wakeMinutes: 7 * 60 + 30,
+  );
 
   MovementLog logOn(
     DateTime date, {
@@ -135,14 +139,24 @@ void main() {
     expect(recap.goalDays, 1);
   });
 
-  test('sleep windows support midnight and measure only outside drift', () {
-    const schedule = SleepScheduleSettings.standard;
+  test('Samsung target creates fixed windows that wrap around midnight', () {
+    const wrappedTarget = SamsungSleepTarget(
+      bedtimeMinutes: 23 * 60 + 45,
+      wakeMinutes: 7 * 60 + 15,
+    );
 
-    expect(schedule.bedtimeDrift(DateTime(2026, 8, 24, 23, 30)), 0);
-    expect(schedule.bedtimeDrift(DateTime(2026, 8, 25, 0, 0)), 0);
-    expect(schedule.bedtimeDrift(DateTime(2026, 8, 25, 0, 45)), 45);
-    expect(schedule.wakeDrift(DateTime(2026, 8, 25, 7, 30)), 0);
-    expect(schedule.wakeDrift(DateTime(2026, 8, 25, 9, 15)), 75);
+    expect(wrappedTarget.bedtimeStartMinutes, 23 * 60 + 15);
+    expect(wrappedTarget.bedtimeEndMinutes, 15);
+    expect(wrappedTarget.wakeStartMinutes, 6 * 60 + 45);
+    expect(wrappedTarget.wakeEndMinutes, 7 * 60 + 45);
+  });
+
+  test('sleep target measures only drift outside its fixed windows', () {
+    expect(target.bedtimeDrift(DateTime(2026, 8, 24, 23, 30)), 0);
+    expect(target.bedtimeDrift(DateTime(2026, 8, 25, 0, 0)), 0);
+    expect(target.bedtimeDrift(DateTime(2026, 8, 25, 0, 45)), 45);
+    expect(target.wakeDrift(DateTime(2026, 8, 25, 7, 30)), 0);
+    expect(target.wakeDrift(DateTime(2026, 8, 25, 9, 15)), 75);
   });
 
   test('sleep rhythm combines bedtime and wake drift with RMS', () {
@@ -154,7 +168,7 @@ void main() {
           end: DateTime(2026, 8, 25, 9),
         ),
       ],
-      SleepScheduleSettings.standard,
+      target,
       now: now,
     );
 
@@ -182,7 +196,7 @@ void main() {
           end: DateTime(2026, 8, 25, 7, 30),
         ),
       ],
-      SleepScheduleSettings.standard,
+      target,
       now: now,
     );
 
@@ -206,11 +220,7 @@ void main() {
     final steps = StepAnalytics([
       DailyStepCount(date: DateTime(2026, 8, 25), steps: 0, syncedAt: now),
     ], now: now);
-    final sleep = SleepAnalytics(
-      const [],
-      SleepScheduleSettings.standard,
-      now: now,
-    );
+    final sleep = SleepAnalytics(const [], target, now: now);
 
     final score = RhythmScore.calculate(
       date: DateTime(2026, 8, 25),
@@ -236,7 +246,7 @@ void main() {
           end: DateTime(2026, 8, 25, 7, 30),
         ),
       ],
-      SleepScheduleSettings.standard,
+      target,
       now: now,
     );
 
@@ -274,7 +284,7 @@ void main() {
             end: DateTime(2026, 8, 25, 7, 30),
           ),
         ],
-        SleepScheduleSettings.standard,
+        target,
         now: now,
       ),
       goals: DailyGoalSettings.standard,
@@ -286,29 +296,32 @@ void main() {
     expect(score.total, 30);
   });
 
-  test('sleep windows require different start and end times', () {
-    expect(SleepScheduleSettings.standard.hasDistinctWindows, isTrue);
-    expect(
-      SleepScheduleSettings.standard
-          .copyWith(bedtimeEndMinutes: 23 * 60)
-          .hasDistinctWindows,
-      isFalse,
+  test('rhythm score stays incomplete without a Samsung sleep target', () {
+    final sleep = SleepAnalytics(
+      [
+        sleepEndingOn(
+          DateTime(2026, 8, 25),
+          start: DateTime(2026, 8, 24, 23, 30),
+          end: DateTime(2026, 8, 25, 7, 30),
+        ),
+      ],
+      null,
+      now: now,
     );
-  });
+    final score = RhythmScore.calculate(
+      date: DateTime(2026, 8, 25),
+      movements: MoveAnalytics(const [], now: now),
+      steps: StepAnalytics([
+        DailyStepCount(date: DateTime(2026, 8, 25), steps: 0, syncedAt: now),
+      ], now: now),
+      sleep: sleep,
+      goals: DailyGoalSettings.standard,
+    );
 
-  test('legacy equal sleep windows fall back to safe defaults', () {
-    final settings = SleepScheduleSettings.fromPlatform({
-      'bedtimeStartMinutes': 60,
-      'bedtimeEndMinutes': 60,
-      'wakeStartMinutes': 390,
-      'wakeEndMinutes': 390,
-    });
-
-    expect(settings, isNotNull);
-    expect(settings.bedtimeStartMinutes, 23 * 60);
-    expect(settings.bedtimeEndMinutes, 0);
-    expect(settings.wakeStartMinutes, 7 * 60);
-    expect(settings.wakeEndMinutes, 8 * 60);
-    expect(settings.hasDistinctWindows, isTrue);
+    expect(sleep.sleepOn(DateTime(2026, 8, 25)), isNotNull);
+    expect(sleep.todayActivity, isNull);
+    expect(score.sleepPoints, isNull);
+    expect(score.balancePoints, isNull);
+    expect(score.total, isNull);
   });
 }

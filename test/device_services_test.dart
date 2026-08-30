@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:move/device_services.dart';
+import 'package:move/models.dart';
 
 void main() {
   test(
@@ -35,6 +36,30 @@ void main() {
       () => DailySleepSync.fromPlatform({
         'startDate': '2026-08-17',
         'endDate': '2026-08-30',
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('Samsung sleep target parser rejects missing values', () {
+    expect(
+      () => SamsungSleepTarget.fromPlatform({'bedtimeMinutes': 23 * 60 + 30}),
+      throwsFormatException,
+    );
+  });
+
+  test('Samsung sleep target parser rejects malformed values', () {
+    expect(
+      () => SamsungSleepTarget.fromPlatform({
+        'bedtimeMinutes': 23.5,
+        'wakeMinutes': 7 * 60 + 30,
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => SamsungSleepTarget.fromPlatform({
+        'bedtimeMinutes': 23 * 60 + 30,
+        'wakeMinutes': 1440,
       }),
       throwsFormatException,
     );

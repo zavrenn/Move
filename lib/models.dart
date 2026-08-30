@@ -504,29 +504,21 @@ class DailySleepRecord {
   }
 }
 
-class SleepScheduleSettings {
-  const SleepScheduleSettings({
-    required this.bedtimeStartMinutes,
-    required this.bedtimeEndMinutes,
-    required this.wakeStartMinutes,
-    required this.wakeEndMinutes,
+class SamsungSleepTarget {
+  const SamsungSleepTarget({
+    required this.bedtimeMinutes,
+    required this.wakeMinutes,
   });
 
-  static const standard = SleepScheduleSettings(
-    bedtimeStartMinutes: 23 * 60,
-    bedtimeEndMinutes: 0,
-    wakeStartMinutes: 7 * 60,
-    wakeEndMinutes: 8 * 60,
-  );
+  static const toleranceMinutes = 30;
 
-  final int bedtimeStartMinutes;
-  final int bedtimeEndMinutes;
-  final int wakeStartMinutes;
-  final int wakeEndMinutes;
+  final int bedtimeMinutes;
+  final int wakeMinutes;
 
-  bool get hasDistinctWindows =>
-      bedtimeStartMinutes != bedtimeEndMinutes &&
-      wakeStartMinutes != wakeEndMinutes;
+  int get bedtimeStartMinutes => _wrap(bedtimeMinutes - toleranceMinutes);
+  int get bedtimeEndMinutes => _wrap(bedtimeMinutes + toleranceMinutes);
+  int get wakeStartMinutes => _wrap(wakeMinutes - toleranceMinutes);
+  int get wakeEndMinutes => _wrap(wakeMinutes + toleranceMinutes);
 
   int bedtimeDrift(DateTime value) => _windowDrift(
     _minutesOfDay(value),
@@ -537,45 +529,22 @@ class SleepScheduleSettings {
   int wakeDrift(DateTime value) =>
       _windowDrift(_minutesOfDay(value), wakeStartMinutes, wakeEndMinutes);
 
-  SleepScheduleSettings copyWith({
-    int? bedtimeStartMinutes,
-    int? bedtimeEndMinutes,
-    int? wakeStartMinutes,
-    int? wakeEndMinutes,
-  }) {
-    return SleepScheduleSettings(
-      bedtimeStartMinutes: bedtimeStartMinutes ?? this.bedtimeStartMinutes,
-      bedtimeEndMinutes: bedtimeEndMinutes ?? this.bedtimeEndMinutes,
-      wakeStartMinutes: wakeStartMinutes ?? this.wakeStartMinutes,
-      wakeEndMinutes: wakeEndMinutes ?? this.wakeEndMinutes,
-    );
-  }
+  factory SamsungSleepTarget.fromPlatform(Map<Object?, Object?> map) {
+    int value(String key) {
+      final raw = map[key];
+      if (raw is! num ||
+          !raw.isFinite ||
+          raw.toInt() != raw ||
+          raw < 0 ||
+          raw > 1439) {
+        throw FormatException('Invalid Samsung Health sleep target: $key.');
+      }
+      return raw.toInt();
+    }
 
-  factory SleepScheduleSettings.fromPlatform(Map<Object?, Object?> map) {
-    int value(String key, int fallback) =>
-        ((map[key] as num?)?.toInt() ?? fallback).clamp(0, 1439).toInt();
-
-    final bedtimeStart = value(
-      'bedtimeStartMinutes',
-      standard.bedtimeStartMinutes,
-    );
-    final bedtimeEnd = value('bedtimeEndMinutes', standard.bedtimeEndMinutes);
-    final wakeStart = value('wakeStartMinutes', standard.wakeStartMinutes);
-    final wakeEnd = value('wakeEndMinutes', standard.wakeEndMinutes);
-    final invalidBedtimeWindow = bedtimeStart == bedtimeEnd;
-    final invalidWakeWindow = wakeStart == wakeEnd;
-
-    return SleepScheduleSettings(
-      bedtimeStartMinutes: invalidBedtimeWindow
-          ? standard.bedtimeStartMinutes
-          : bedtimeStart,
-      bedtimeEndMinutes: invalidBedtimeWindow
-          ? standard.bedtimeEndMinutes
-          : bedtimeEnd,
-      wakeStartMinutes: invalidWakeWindow
-          ? standard.wakeStartMinutes
-          : wakeStart,
-      wakeEndMinutes: invalidWakeWindow ? standard.wakeEndMinutes : wakeEnd,
+    return SamsungSleepTarget(
+      bedtimeMinutes: value('bedtimeMinutes'),
+      wakeMinutes: value('wakeMinutes'),
     );
   }
 
@@ -597,6 +566,8 @@ class SleepScheduleSettings {
     final difference = (first - second).abs();
     return difference < 1440 - difference ? difference : 1440 - difference;
   }
+
+  static int _wrap(int minutes) => (minutes % 1440 + 1440) % 1440;
 }
 
 class DailyGoalSettings {

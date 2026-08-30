@@ -30,8 +30,9 @@ class PermissionsRationaleActivity : Activity() {
             setTextColor(Color.rgb(241, 245, 240))
         })
         content.addView(TextView(this).apply {
-            text = "Move reads your daily step totals and sleep timing from Health Connect. " +
-                "It never writes health data or sends it off this device. " +
+            text = "Move reads daily steps and actual sleep timing from Health Connect. " +
+                "Your sleep target is read separately from Samsung Health. " +
+                "Move never writes health data or sends it off this device. " +
                 "Daily totals and sleep rhythm are cached locally for your dashboard and progress views."
             textSize = 17f
             setTextColor(Color.rgb(156, 168, 159))

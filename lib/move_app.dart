@@ -40,19 +40,25 @@ class MoveShell extends StatefulWidget {
 class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
   final _database = MoveDatabase.instance;
   final _health = const HealthConnectService();
+  final _samsungHealth = const SamsungHealthService();
   final _preferences = const MovePreferencesService();
   List<MovementLog> _logs = const [];
   List<DailyStepCount> _steps = const [];
   List<DailySleepRecord> _sleep = const [];
   DailyGoalSettings _goals = DailyGoalSettings.standard;
-  SleepScheduleSettings _sleepSchedule = SleepScheduleSettings.standard;
+  SamsungSleepTarget? _sleepTarget;
   List<String> _quickMovementIds = List.of(MovementCatalog.quickIds);
   HealthConnectStatus? _healthStatus;
   HealthConnectStatus? _sleepStatus;
+  SamsungHealthStatus? _sleepTargetStatus;
   bool _syncingSteps = false;
   bool _syncingSleep = false;
+  bool _syncingSleepTarget = false;
+  bool _requestingSleepTarget = false;
   bool _stepSyncFailed = false;
   bool _sleepSyncFailed = false;
+  bool _sleepTargetSyncFailed = false;
+  Future<void>? _sleepTargetRefresh;
   bool _loading = true;
   String? _loadError;
   int _tab = 0;
@@ -93,7 +99,6 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
         _steps = values[1] as List<DailyStepCount>;
         _sleep = values[2] as List<DailySleepRecord>;
         _goals = preferences.goals;
-        _sleepSchedule = preferences.sleepSchedule;
         _quickMovementIds = preferences.quickMovementIds;
         _loading = false;
         _loadError = null;
@@ -193,8 +198,70 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _refreshSleepTarget({bool refreshAgainIfBusy = false}) async {
+    final activeRefresh = _sleepTargetRefresh;
+    if (activeRefresh != null) {
+      await activeRefresh;
+      if (!refreshAgainIfBusy) return;
+    }
+
+    final refresh = _performSleepTargetRefresh();
+    _sleepTargetRefresh = refresh;
+    try {
+      await refresh;
+    } finally {
+      if (identical(_sleepTargetRefresh, refresh)) {
+        _sleepTargetRefresh = null;
+      }
+    }
+  }
+
+  Future<void> _performSleepTargetRefresh() async {
+    if (mounted) {
+      setState(() {
+        _syncingSleepTarget = true;
+        _sleepTargetSyncFailed = false;
+        _sleepTarget = null;
+      });
+    }
+    try {
+      final status = await _samsungHealth.getSleepTargetStatus();
+      if (!mounted) return;
+      setState(() {
+        _sleepTargetStatus = status;
+        _sleepTargetSyncFailed = status == SamsungHealthStatus.error;
+      });
+      if (status != SamsungHealthStatus.connected) return;
+
+      final target = await _samsungHealth.readSleepTarget();
+      if (!mounted) return;
+      setState(() {
+        _sleepTarget = target;
+        _sleepTargetStatus = target == null
+            ? SamsungHealthStatus.noTarget
+            : SamsungHealthStatus.connected;
+      });
+    } catch (_) {
+      final status = await _samsungHealth.getSleepTargetStatus();
+      if (!mounted) return;
+      setState(() {
+        _sleepTarget = null;
+        _sleepTargetStatus = status;
+        _sleepTargetSyncFailed =
+            status == SamsungHealthStatus.connected ||
+            status == SamsungHealthStatus.error;
+      });
+    } finally {
+      if (mounted) setState(() => _syncingSleepTarget = false);
+    }
+  }
+
   Future<void> _refreshHealthData() async {
-    await Future.wait([_refreshSteps(), _refreshSleep()]);
+    await Future.wait([
+      _refreshSteps(),
+      _refreshSleep(),
+      _refreshSleepTarget(),
+    ]);
   }
 
   Future<void> _connectSteps() async {
@@ -221,13 +288,36 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _connectSleepTarget() async {
+    if (_requestingSleepTarget) return;
+    if (mounted) setState(() => _requestingSleepTarget = true);
+    try {
+      final granted = await _samsungHealth.requestSleepTargetPermission();
+      await _refreshSleepTarget(refreshAgainIfBusy: true);
+      if (!granted &&
+          mounted &&
+          _sleepTargetStatus == SamsungHealthStatus.permissionRequired) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sleep target access was not enabled.')),
+        );
+      }
+    } catch (_) {
+      await _refreshSleepTarget(refreshAgainIfBusy: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sleep target access was not enabled.')),
+      );
+    } finally {
+      if (mounted) setState(() => _requestingSleepTarget = false);
+    }
+  }
+
   Future<void> _openSettings() async {
     await showMoveSettings(context);
     final preferences = await _preferences.getPreferences();
     if (mounted) {
       setState(() {
         _goals = preferences.goals;
-        _sleepSchedule = preferences.sleepSchedule;
         _quickMovementIds = preferences.quickMovementIds;
       });
       await _publishSnapshot();
@@ -364,19 +454,23 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
         steps: _steps,
         sleep: _sleep,
         goals: _goals,
-        sleepSchedule: _sleepSchedule,
+        sleepTarget: _sleepTarget,
         quickMovements: _quickMovementIds.map(MovementCatalog.byId).toList(),
         healthStatus: _healthStatus,
         sleepStatus: _sleepStatus,
+        sleepTargetStatus: _sleepTargetStatus,
         syncingSteps: _syncingSteps,
         syncingSleep: _syncingSleep,
+        syncingSleepTarget: _syncingSleepTarget || _requestingSleepTarget,
         stepSyncFailed: _stepSyncFailed,
         sleepSyncFailed: _sleepSyncFailed,
+        sleepTargetSyncFailed: _sleepTargetSyncFailed,
         onLog: (movement) => _openLogger(movement: movement),
         onEdit: (log) => _openLogger(existing: log),
         onOpenHistory: () => setState(() => _tab = 1),
         onConnectSteps: _connectSteps,
         onConnectSleep: _connectSleep,
+        onConnectSleepTarget: _connectSleepTarget,
         onRefreshHealthData: _refreshHealthData,
         onOpenSettings: _openSettings,
         onCustomizeQuickMoves: _customizeQuickMoves,
@@ -391,8 +485,10 @@ class _MoveShellState extends State<MoveShell> with WidgetsBindingObserver {
         steps: _steps,
         sleep: _sleep,
         goals: _goals,
-        sleepSchedule: _sleepSchedule,
+        sleepTarget: _sleepTarget,
+        sleepTargetStatus: _sleepTargetStatus,
         sleepSyncFailed: _sleepSyncFailed,
+        sleepTargetSyncFailed: _sleepTargetSyncFailed,
       ),
     ];
 

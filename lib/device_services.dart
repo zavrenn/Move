@@ -12,6 +12,65 @@ enum HealthConnectStatus {
   error,
 }
 
+enum SamsungHealthStatus {
+  connected,
+  permissionRequired,
+  noTarget,
+  authorizationRequired,
+  notInstalled,
+  updateRequired,
+  disabled,
+  notInitialized,
+  unavailable,
+  unsupported,
+  error,
+}
+
+class SamsungHealthService {
+  const SamsungHealthService();
+
+  static const _channel = MethodChannel('com.med.move/device');
+
+  Future<SamsungHealthStatus> getSleepTargetStatus() async {
+    if (!Platform.isAndroid) return SamsungHealthStatus.unsupported;
+    try {
+      final value = await _channel.invokeMethod<String>(
+        'samsungSleepTargetStatus',
+      );
+      return switch (value) {
+        'connected' => SamsungHealthStatus.connected,
+        'permissionRequired' => SamsungHealthStatus.permissionRequired,
+        'authorizationRequired' => SamsungHealthStatus.authorizationRequired,
+        'notInstalled' => SamsungHealthStatus.notInstalled,
+        'updateRequired' => SamsungHealthStatus.updateRequired,
+        'disabled' => SamsungHealthStatus.disabled,
+        'notInitialized' => SamsungHealthStatus.notInitialized,
+        'unavailable' => SamsungHealthStatus.unavailable,
+        'unsupported' => SamsungHealthStatus.unsupported,
+        _ => SamsungHealthStatus.error,
+      };
+    } on PlatformException {
+      return SamsungHealthStatus.error;
+    } on MissingPluginException {
+      return SamsungHealthStatus.unsupported;
+    }
+  }
+
+  Future<bool> requestSleepTargetPermission() async {
+    return await _channel.invokeMethod<bool>(
+          'requestSamsungSleepTargetPermission',
+        ) ??
+        false;
+  }
+
+  Future<SamsungSleepTarget?> readSleepTarget() async {
+    final value = await _channel.invokeMapMethod<Object?, Object?>(
+      'readSamsungSleepTarget',
+    );
+    return value == null ? null : SamsungSleepTarget.fromPlatform(value);
+  }
+}
+
 class HealthConnectService {
   const HealthConnectService();
 
@@ -175,15 +234,10 @@ class ReminderService {
 }
 
 class MovePreferences {
-  const MovePreferences({
-    required this.goals,
-    required this.quickMovementIds,
-    required this.sleepSchedule,
-  });
+  const MovePreferences({required this.goals, required this.quickMovementIds});
 
   final DailyGoalSettings goals;
   final List<String> quickMovementIds;
-  final SleepScheduleSettings sleepSchedule;
 
   factory MovePreferences.fromPlatform(Map<Object?, Object?> map) {
     final rawIds = (map['quickMovementIds'] as List<Object?>? ?? const [])
@@ -200,7 +254,6 @@ class MovePreferences {
       quickMovementIds: validIds.length >= 2
           ? validIds.take(8).toList()
           : List.of(MovementCatalog.quickIds),
-      sleepSchedule: SleepScheduleSettings.fromPlatform(map),
     );
   }
 }
@@ -215,7 +268,6 @@ class MovePreferencesService {
       return MovePreferences(
         goals: DailyGoalSettings.standard,
         quickMovementIds: List.of(MovementCatalog.quickIds),
-        sleepSchedule: SleepScheduleSettings.standard,
       );
     }
     final value = await _channel.invokeMapMethod<Object?, Object?>(
@@ -234,19 +286,6 @@ class MovePreferencesService {
 
   Future<void> setQuickMovementIds(List<String> ids) {
     return _channel.invokeMethod<void>('setQuickMovementIds', {'ids': ids});
-  }
-
-  Future<SleepScheduleSettings> setSleepSchedule(
-    SleepScheduleSettings schedule,
-  ) async {
-    final value = await _channel
-        .invokeMapMethod<Object?, Object?>('setSleepSchedule', {
-          'bedtimeStartMinutes': schedule.bedtimeStartMinutes,
-          'bedtimeEndMinutes': schedule.bedtimeEndMinutes,
-          'wakeStartMinutes': schedule.wakeStartMinutes,
-          'wakeEndMinutes': schedule.wakeEndMinutes,
-        });
-    return SleepScheduleSettings.fromPlatform(value ?? const {});
   }
 
   Future<void> updateSnapshot({

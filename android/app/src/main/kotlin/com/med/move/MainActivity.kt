@@ -15,12 +15,25 @@ import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import com.samsung.android.sdk.health.data.HealthDataService
+import com.samsung.android.sdk.health.data.HealthDataStore
+import com.samsung.android.sdk.health.data.error.AuthorizationException
+import com.samsung.android.sdk.health.data.error.ErrorCode
+import com.samsung.android.sdk.health.data.error.HealthDataException
+import com.samsung.android.sdk.health.data.error.ResolvablePlatformException
+import com.samsung.android.sdk.health.data.permission.AccessType
+import com.samsung.android.sdk.health.data.permission.Permission
+import com.samsung.android.sdk.health.data.request.DataType
+import com.samsung.android.sdk.health.data.request.DataTypes
+import com.samsung.android.sdk.health.data.request.LocalDateFilter
+import com.samsung.android.sdk.health.data.request.Ordering
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +54,9 @@ class MainActivity : FlutterActivity() {
         HealthPermission.getReadPermission(StepsRecord::class)
     private val sleepPermission =
         HealthPermission.getReadPermission(SleepSessionRecord::class)
+    private val samsungSleepGoalPermission =
+        Permission.of(DataTypes.SLEEP_GOAL, AccessType.READ)
+    private val samsungSleepGoalPermissions = setOf(samsungSleepGoalPermission)
     private val healthPermissionContract by lazy {
         PermissionController.createRequestPermissionResultContract()
     }
@@ -66,6 +82,10 @@ class MainActivity : FlutterActivity() {
             "sleepStatus" -> sleepStatus(result)
             "requestSleepPermission" -> requestSleepPermission(result)
             "readDailySleep" -> readDailySleep(call, result)
+            "samsungSleepTargetStatus" -> samsungSleepTargetStatus(result)
+            "requestSamsungSleepTargetPermission" ->
+                requestSamsungSleepTargetPermission(result)
+            "readSamsungSleepTarget" -> readSamsungSleepTarget(result)
             "openHealthConnect" -> openHealthConnect(result)
             "reminderStatus" -> result.success(ReminderScheduler.status(this))
             "requestNotificationPermission" -> requestNotificationPermission(result)
@@ -73,7 +93,6 @@ class MainActivity : FlutterActivity() {
             "appPreferences" -> result.success(MoveStateStore.preferencesMap(this))
             "setDailyGoals" -> setDailyGoals(call, result)
             "setQuickMovementIds" -> setQuickMovementIds(call, result)
-            "setSleepSchedule" -> setSleepSchedule(call, result)
             "updateMoveSnapshot" -> updateMoveSnapshot(call, result)
             "homeWidgetStatus" -> homeWidgetStatus(result)
             "pinHomeWidget" -> pinHomeWidget(result)
@@ -316,6 +335,147 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private data class SamsungSleepGoal(
+        val bedtime: LocalTime,
+        val wakeTime: LocalTime,
+    )
+
+    private fun samsungSleepTargetStatus(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.success("unsupported")
+            return
+        }
+        activityScope.launch {
+            try {
+                val granted = samsungStore()
+                    .getGrantedPermissions(samsungSleepGoalPermissions)
+                    .contains(samsungSleepGoalPermission)
+                result.success(if (granted) "connected" else "permissionRequired")
+            } catch (error: HealthDataException) {
+                result.success(samsungStatus(error))
+            } catch (_: Exception) {
+                result.success("error")
+            }
+        }
+    }
+
+    private fun requestSamsungSleepTargetPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.error("samsung_health_unsupported", "Android 10 or newer is required.", null)
+            return
+        }
+        activityScope.launch {
+            try {
+                val granted = samsungStore().requestPermissions(
+                    samsungSleepGoalPermissions,
+                    this@MainActivity,
+                )
+                result.success(granted.contains(samsungSleepGoalPermission))
+            } catch (error: ResolvablePlatformException) {
+                if (error.hasResolution) {
+                    error.resolve(this@MainActivity)
+                    result.success(false)
+                } else {
+                    result.error(samsungErrorKey(error), error.errorMessage, error.errorCode)
+                }
+            } catch (error: HealthDataException) {
+                result.error(samsungErrorKey(error), error.errorMessage, error.errorCode)
+            } catch (error: Exception) {
+                result.error("samsung_health_error", error.message, null)
+            }
+        }
+    }
+
+    private fun readSamsungSleepTarget(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.error("samsung_health_unsupported", "Android 10 or newer is required.", null)
+            return
+        }
+        activityScope.launch {
+            try {
+                val store = samsungStore()
+                val granted = store.getGrantedPermissions(samsungSleepGoalPermissions)
+                if (!granted.contains(samsungSleepGoalPermission)) {
+                    result.error(
+                        "samsung_sleep_goal_permission_required",
+                        "Samsung Health sleep goal permission is required.",
+                        null,
+                    )
+                    return@launch
+                }
+                val goal = readSamsungSleepGoal(store)
+                result.success(
+                    goal?.let {
+                        mapOf(
+                            "bedtimeMinutes" to it.bedtime.hour * 60 + it.bedtime.minute,
+                            "wakeMinutes" to it.wakeTime.hour * 60 + it.wakeTime.minute,
+                        )
+                    },
+                )
+            } catch (error: HealthDataException) {
+                result.error(samsungErrorKey(error), error.errorMessage, error.errorCode)
+            } catch (error: Exception) {
+                result.error("samsung_health_error", error.message, null)
+            }
+        }
+    }
+
+    private suspend fun readSamsungSleepGoal(store: HealthDataStore): SamsungSleepGoal? {
+        val today = LocalDate.now()
+        val dateFilter = LocalDateFilter.of(today, today, true, true)
+        val bedtimeRequest = DataType.SleepGoalType.LAST_BED_TIME.requestBuilder
+            .setLocalDateFilter(dateFilter)
+            .setOrdering(Ordering.DESC)
+            .build()
+        val wakeRequest = DataType.SleepGoalType.LAST_WAKE_UP_TIME.requestBuilder
+            .setLocalDateFilter(dateFilter)
+            .setOrdering(Ordering.DESC)
+            .build()
+        val bedtime = store.aggregateData(bedtimeRequest).dataList
+            .firstOrNull()?.value ?: return null
+        val wakeTime = store.aggregateData(wakeRequest).dataList
+            .firstOrNull()?.value ?: return null
+        return SamsungSleepGoal(bedtime = bedtime, wakeTime = wakeTime)
+    }
+
+    private fun samsungStore(): HealthDataStore =
+        HealthDataService.getStore(applicationContext)
+
+    private fun samsungStatus(error: HealthDataException): String = when (error) {
+        is ResolvablePlatformException -> when (error.errorCode) {
+            ErrorCode.ERR_PLATFORM_NOT_INSTALLED -> "notInstalled"
+            ErrorCode.ERR_OLD_VERSION_PLATFORM -> "updateRequired"
+            ErrorCode.ERR_PLATFORM_DISABLED -> "disabled"
+            ErrorCode.ERR_PLATFORM_NOT_INITIALIZED -> "notInitialized"
+            else -> "unavailable"
+        }
+        is AuthorizationException -> when (error.errorCode) {
+            ErrorCode.ERR_NO_USER_PERMISSION -> "permissionRequired"
+            ErrorCode.ERR_UNSUPPORTED_OPERATION -> "unsupported"
+            else -> "authorizationRequired"
+        }
+        else -> "error"
+    }
+
+    private fun samsungErrorKey(error: HealthDataException): String = when (error) {
+        is ResolvablePlatformException -> when (error.errorCode) {
+            ErrorCode.ERR_PLATFORM_NOT_INSTALLED -> "samsung_health_not_installed"
+            ErrorCode.ERR_OLD_VERSION_PLATFORM -> "samsung_health_update_required"
+            ErrorCode.ERR_PLATFORM_DISABLED -> "samsung_health_disabled"
+            ErrorCode.ERR_PLATFORM_NOT_INITIALIZED -> "samsung_health_not_initialized"
+            else -> "samsung_health_unavailable"
+        }
+        is AuthorizationException -> when (error.errorCode) {
+            ErrorCode.ERR_NO_USER_PERMISSION -> "samsung_sleep_goal_permission_required"
+            ErrorCode.ERR_ACCESS_CONTROL -> "samsung_health_sdk_policy_denied"
+            ErrorCode.ERR_UNSUPPORTED_OPERATION -> "samsung_health_unsupported"
+            ErrorCode.ERR_INVALID_PLATFORM_SIGNATURE -> "samsung_health_invalid_platform"
+            ErrorCode.ERR_CHILD_ACCOUNT_ACCESS -> "samsung_health_child_account"
+            else -> "samsung_health_not_authorized"
+        }
+        else -> "samsung_health_error"
+    }
+
     private fun requestNotificationPermission(result: MethodChannel.Result) {
         if (ReminderScheduler.notificationsAllowed(this)) {
             result.success(true)
@@ -365,34 +525,6 @@ class MainActivity : FlutterActivity() {
         }
         MoveStateStore.setQuickMovementIds(this, ids)
         result.success(null)
-    }
-
-    private fun setSleepSchedule(call: MethodCall, result: MethodChannel.Result) {
-        val bedtimeStart = call.argument<Int>("bedtimeStartMinutes")
-            ?.coerceIn(0, 1439) ?: MoveStateStore.DEFAULT_BEDTIME_START_MINUTES
-        val bedtimeEnd = call.argument<Int>("bedtimeEndMinutes")
-            ?.coerceIn(0, 1439) ?: MoveStateStore.DEFAULT_BEDTIME_END_MINUTES
-        val wakeStart = call.argument<Int>("wakeStartMinutes")
-            ?.coerceIn(0, 1439) ?: MoveStateStore.DEFAULT_WAKE_START_MINUTES
-        val wakeEnd = call.argument<Int>("wakeEndMinutes")
-            ?.coerceIn(0, 1439) ?: MoveStateStore.DEFAULT_WAKE_END_MINUTES
-        if (bedtimeStart == bedtimeEnd || wakeStart == wakeEnd) {
-            result.error(
-                "invalid_sleep_schedule",
-                "Sleep window start and end must be different.",
-                null,
-            )
-            return
-        }
-        result.success(
-            MoveStateStore.setSleepSchedule(
-                context = this,
-                bedtimeStartMinutes = bedtimeStart,
-                bedtimeEndMinutes = bedtimeEnd,
-                wakeStartMinutes = wakeStart,
-                wakeEndMinutes = wakeEnd,
-            ),
-        )
     }
 
     private fun updateMoveSnapshot(call: MethodCall, result: MethodChannel.Result) {

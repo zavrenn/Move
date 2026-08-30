@@ -30,21 +30,24 @@ class _MoveSettingsSheet extends StatefulWidget {
 class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     with WidgetsBindingObserver {
   final _health = const HealthConnectService();
+  final _samsungHealth = const SamsungHealthService();
   final _reminders = const ReminderService();
   final _preferences = const MovePreferencesService();
   final _widget = const HomeWidgetService();
 
   HealthConnectStatus? _healthStatus;
   HealthConnectStatus? _sleepStatus;
+  SamsungHealthStatus? _sleepTargetStatus;
+  SamsungSleepTarget? _sleepTarget;
   ReminderStatus? _reminderStatus;
   DailyGoalSettings _goals = DailyGoalSettings.standard;
-  SleepScheduleSettings _sleepSchedule = SleepScheduleSettings.standard;
   HomeWidgetStatus? _widgetStatus;
   bool _healthBusy = false;
   bool _sleepBusy = false;
+  bool _sleepTargetBusy = false;
+  bool _sleepTargetFailed = false;
   bool _reminderBusy = false;
   bool _goalBusy = false;
-  bool _scheduleBusy = false;
   bool _widgetBusy = false;
 
   @override
@@ -62,7 +65,10 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _loadWidgetStatus();
+    if (state == AppLifecycleState.resumed) {
+      _loadWidgetStatus();
+      _refreshSleepTarget();
+    }
   }
 
   Future<void> _load() async {
@@ -81,9 +87,9 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
         _sleepStatus = values[1] as HealthConnectStatus;
         _reminderStatus = values[2] as ReminderStatus;
         _goals = preferences.goals;
-        _sleepSchedule = preferences.sleepSchedule;
         _widgetStatus = values[4] as HomeWidgetStatus;
       });
+      await _refreshSleepTarget();
     } catch (_) {
       if (!mounted) return;
       _showError('Could not load settings.');
@@ -127,6 +133,57 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     }
   }
 
+  Future<void> _refreshSleepTarget() async {
+    if (_sleepTargetBusy) return;
+    if (mounted) {
+      setState(() {
+        _sleepTargetBusy = true;
+        _sleepTargetFailed = false;
+        _sleepTarget = null;
+      });
+    }
+    try {
+      final status = await _samsungHealth.getSleepTargetStatus();
+      if (!mounted) return;
+      setState(() => _sleepTargetStatus = status);
+      if (status != SamsungHealthStatus.connected) return;
+      final target = await _samsungHealth.readSleepTarget();
+      if (!mounted) return;
+      setState(() {
+        _sleepTarget = target;
+        _sleepTargetStatus = target == null
+            ? SamsungHealthStatus.noTarget
+            : SamsungHealthStatus.connected;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _sleepTarget = null;
+        _sleepTargetFailed = true;
+      });
+    } finally {
+      if (mounted) setState(() => _sleepTargetBusy = false);
+    }
+  }
+
+  Future<void> _connectSleepTarget() async {
+    if (_sleepTargetBusy) return;
+    final wasPermissionRequest =
+        _sleepTargetStatus == SamsungHealthStatus.permissionRequired;
+    setState(() => _sleepTargetBusy = true);
+    try {
+      final granted = await _samsungHealth.requestSleepTargetPermission();
+      if (!granted && mounted && wasPermissionRequest) {
+        _showError('Sleep target access was not enabled.');
+      }
+    } catch (_) {
+      if (mounted) _showError('Sleep target access was not enabled.');
+    } finally {
+      if (mounted) setState(() => _sleepTargetBusy = false);
+    }
+    await _refreshSleepTarget();
+  }
+
   Future<void> _toggleReminder(bool enabled) async {
     setState(() => _reminderBusy = true);
     try {
@@ -166,64 +223,6 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     } finally {
       if (mounted) setState(() => _goalBusy = false);
     }
-  }
-
-  Future<void> _setSleepSchedule(SleepScheduleSettings next) async {
-    if (_scheduleBusy) return;
-    final previous = _sleepSchedule;
-    setState(() {
-      _scheduleBusy = true;
-      _sleepSchedule = next;
-    });
-    try {
-      final saved = await _preferences.setSleepSchedule(next);
-      if (mounted) setState(() => _sleepSchedule = saved);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _sleepSchedule = previous);
-        _showError('Could not update the sleep window.');
-      }
-    } finally {
-      if (mounted) setState(() => _scheduleBusy = false);
-    }
-  }
-
-  Future<void> _editSleepWindow({required bool bedtime}) async {
-    if (_scheduleBusy) return;
-    final startMinutes = bedtime
-        ? _sleepSchedule.bedtimeStartMinutes
-        : _sleepSchedule.wakeStartMinutes;
-    final endMinutes = bedtime
-        ? _sleepSchedule.bedtimeEndMinutes
-        : _sleepSchedule.wakeEndMinutes;
-    final start = await showTimePicker(
-      context: context,
-      initialTime: _timeOfDay(startMinutes),
-      helpText: bedtime ? 'BEDTIME WINDOW START' : 'WAKE WINDOW START',
-    );
-    if (start == null || !mounted) return;
-    final end = await showTimePicker(
-      context: context,
-      initialTime: _timeOfDay(endMinutes),
-      helpText: bedtime ? 'BEDTIME WINDOW END' : 'WAKE WINDOW END',
-    );
-    if (end == null || !mounted) return;
-    final selectedStartMinutes = _minutesOfDay(start);
-    final selectedEndMinutes = _minutesOfDay(end);
-    if (selectedStartMinutes == selectedEndMinutes) {
-      _showError('Start and end must be different.');
-      return;
-    }
-    final next = bedtime
-        ? _sleepSchedule.copyWith(
-            bedtimeStartMinutes: selectedStartMinutes,
-            bedtimeEndMinutes: selectedEndMinutes,
-          )
-        : _sleepSchedule.copyWith(
-            wakeStartMinutes: selectedStartMinutes,
-            wakeEndMinutes: selectedEndMinutes,
-          );
-    await _setSleepSchedule(next);
   }
 
   Future<void> _pinWidget() async {
@@ -397,7 +396,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _sleepTitle(_sleepStatus),
+                                  'Sleep sessions · Health Connect',
                                   style: Theme.of(
                                     context,
                                   ).textTheme.titleMedium,
@@ -415,7 +414,7 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                                         ? null
                                         : _connectSleep,
                                     icon: const Icon(Icons.link_rounded),
-                                    label: const Text('Connect sleep'),
+                                    label: const Text('Connect sessions'),
                                   )
                                 else if (_sleepStatus ==
                                     HealthConnectStatus.connected)
@@ -430,28 +429,72 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                         ],
                       ),
                       const Divider(height: 18),
-                      _SleepWindowRow(
-                        icon: Icons.bedtime_outlined,
-                        label: 'Bedtime window',
-                        value: _timeRangeLabel(
-                          _sleepSchedule.bedtimeStartMinutes,
-                          _sleepSchedule.bedtimeEndMinutes,
-                        ),
-                        onTap: _scheduleBusy
-                            ? null
-                            : () => _editSleepWindow(bedtime: true),
-                      ),
-                      const Divider(height: 1),
-                      _SleepWindowRow(
-                        icon: Icons.wb_sunny_outlined,
-                        label: 'Wake window',
-                        value: _timeRangeLabel(
-                          _sleepSchedule.wakeStartMinutes,
-                          _sleepSchedule.wakeEndMinutes,
-                        ),
-                        onTap: _scheduleBusy
-                            ? null
-                            : () => _editSleepWindow(bedtime: false),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Icon(
+                              Icons.track_changes_rounded,
+                              color: MoveColors.sleep,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Sleep target · Samsung Health',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _sleepTargetDescription(),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (_sleepTarget != null) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Target ${_timeLabel(_sleepTarget!.bedtimeMinutes)} · '
+                                    'wake ${_timeLabel(_sleepTarget!.wakeMinutes)}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleSmall,
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'Bedtime ${_timeRangeLabel(_sleepTarget!.bedtimeStartMinutes, _sleepTarget!.bedtimeEndMinutes)} · '
+                                    'wake ${_timeRangeLabel(_sleepTarget!.wakeStartMinutes, _sleepTarget!.wakeEndMinutes)}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                if (_canConnectSleepTarget)
+                                  FilledButton.tonalIcon(
+                                    onPressed: _sleepTargetBusy
+                                        ? null
+                                        : _connectSleepTarget,
+                                    icon: const Icon(Icons.link_rounded),
+                                    label: Text(_sleepTargetActionLabel),
+                                  )
+                                else
+                                  TextButton.icon(
+                                    onPressed: _sleepTargetBusy
+                                        ? null
+                                        : _refreshSleepTarget,
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    label: const Text('Refresh target'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -568,8 +611,9 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Move reads daily step totals and sleep timing. It never '
-                  'writes health data, and everything remains on this device.',
+                  'Move reads steps and sleep sessions from Health Connect, '
+                  'plus your sleep target from Samsung Health. It never writes '
+                  'health data, and everything remains on this device.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
@@ -611,15 +655,6 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     null => 'Checking availability and permission status.',
   };
 
-  String _sleepTitle(HealthConnectStatus? status) => switch (status) {
-    null => 'Checking sleep access…',
-    HealthConnectStatus.connected => 'Sleep timing connected',
-    HealthConnectStatus.permissionRequired => 'Connect sleep timing',
-    HealthConnectStatus.updateRequired => 'Health Connect needs an update',
-    HealthConnectStatus.unsupported => 'Sleep timing unavailable',
-    HealthConnectStatus.error => 'Could not check sleep access',
-  };
-
   String _sleepDescription(HealthConnectStatus? status) => switch (status) {
     HealthConnectStatus.connected =>
       'Move reads your main sleep start and wake time.',
@@ -633,10 +668,61 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
     null => 'Checking availability and permission status.',
   };
 
+  String _sleepTargetDescription() {
+    if (_sleepTargetBusy) return 'Checking Samsung Health…';
+    if (_sleepTargetFailed) return 'Target refresh failed. Try again.';
+    return switch (_sleepTargetStatus) {
+      null => 'Checking availability and permission status.',
+      SamsungHealthStatus.connected =>
+        'Read-only target; Move derives fixed ±30-minute windows.',
+      SamsungHealthStatus.permissionRequired =>
+        'Allow read-only access to your sleep target.',
+      SamsungHealthStatus.noTarget =>
+        'No sleep target found. Set it in Samsung Health, then refresh.',
+      SamsungHealthStatus.authorizationRequired =>
+        'Samsung Health did not authorize this build. Enable Developer Mode for local testing.',
+      SamsungHealthStatus.notInstalled => 'Samsung Health is not installed.',
+      SamsungHealthStatus.updateRequired =>
+        'Update Samsung Health before reading the sleep target.',
+      SamsungHealthStatus.disabled => 'Samsung Health is disabled.',
+      SamsungHealthStatus.notInitialized =>
+        'Finish setting up Samsung Health before reading the target.',
+      SamsungHealthStatus.unavailable =>
+        'Samsung Health is unavailable, disabled, or needs an update.',
+      SamsungHealthStatus.unsupported =>
+        'Samsung Health sleep targets are unsupported on this device.',
+      SamsungHealthStatus.error => 'Could not check sleep target access.',
+    };
+  }
+
+  bool get _canConnectSleepTarget => switch (_sleepTargetStatus) {
+    SamsungHealthStatus.permissionRequired ||
+    SamsungHealthStatus.notInstalled ||
+    SamsungHealthStatus.updateRequired ||
+    SamsungHealthStatus.disabled ||
+    SamsungHealthStatus.notInitialized ||
+    SamsungHealthStatus.unavailable => true,
+    _ => false,
+  };
+
+  String get _sleepTargetActionLabel => switch (_sleepTargetStatus) {
+    SamsungHealthStatus.permissionRequired => 'Connect target',
+    SamsungHealthStatus.notInstalled => 'Install Samsung Health',
+    SamsungHealthStatus.updateRequired => 'Update Samsung Health',
+    SamsungHealthStatus.disabled => 'Enable Samsung Health',
+    SamsungHealthStatus.notInitialized => 'Open Samsung Health',
+    _ => 'Fix Samsung Health',
+  };
+
   TimeOfDay _timeOfDay(int minutes) =>
       TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60);
 
-  int _minutesOfDay(TimeOfDay value) => value.hour * 60 + value.minute;
+  String _timeLabel(int minutes) {
+    return MaterialLocalizations.of(context).formatTimeOfDay(
+      _timeOfDay(minutes),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+  }
 
   String _timeRangeLabel(int startMinutes, int endMinutes) {
     final localizations = MaterialLocalizations.of(context);
@@ -650,32 +736,6 @@ class _MoveSettingsSheetState extends State<_MoveSettingsSheet>
       alwaysUse24HourFormat: use24Hour,
     );
     return '$start – $end';
-  }
-}
-
-class _SleepWindowRow extends StatelessWidget {
-  const _SleepWindowRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      onTap: onTap,
-      leading: Icon(icon, color: MoveColors.sleep),
-      title: Text(label, style: Theme.of(context).textTheme.titleSmall),
-      subtitle: Text(value),
-      trailing: const Icon(Icons.chevron_right_rounded),
-    );
   }
 }
 

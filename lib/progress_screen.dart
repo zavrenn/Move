@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'analytics.dart';
+import 'device_services.dart';
 import 'models.dart';
 import 'move_theme.dart';
 import 'move_widgets.dart';
@@ -15,22 +16,26 @@ class ProgressScreen extends StatelessWidget {
     required this.steps,
     required this.sleep,
     required this.goals,
-    required this.sleepSchedule,
+    required this.sleepTarget,
+    required this.sleepTargetStatus,
     required this.sleepSyncFailed,
+    required this.sleepTargetSyncFailed,
   });
 
   final List<MovementLog> logs;
   final List<DailyStepCount> steps;
   final List<DailySleepRecord> sleep;
   final DailyGoalSettings goals;
-  final SleepScheduleSettings sleepSchedule;
+  final SamsungSleepTarget? sleepTarget;
+  final SamsungHealthStatus? sleepTargetStatus;
   final bool sleepSyncFailed;
+  final bool sleepTargetSyncFailed;
 
   @override
   Widget build(BuildContext context) {
     final analytics = MoveAnalytics(logs);
     final stepAnalytics = StepAnalytics(steps);
-    final sleepAnalytics = SleepAnalytics(sleep, sleepSchedule);
+    final sleepAnalytics = SleepAnalytics(sleep, sleepTarget);
     final activity = ActivityAnalytics(
       movements: analytics,
       steps: stepAnalytics,
@@ -90,13 +95,15 @@ class ProgressScreen extends StatelessWidget {
             const SizedBox(height: 22),
             const SectionTitle(
               title: 'Sleep rhythm',
-              subtitle: 'Timing consistency across your last seven nights',
+              subtitle: 'Compared with your Samsung Health sleep target',
             ),
             const SizedBox(height: 10),
             _SleepRhythmCard(
               analytics: sleepAnalytics,
-              schedule: sleepSchedule,
-              syncFailed: sleepSyncFailed,
+              target: sleepTarget,
+              targetStatus: sleepTargetStatus,
+              sleepSyncFailed: sleepSyncFailed,
+              targetSyncFailed: sleepTargetSyncFailed,
             ),
             const SizedBox(height: 22),
             const SectionTitle(
@@ -206,17 +213,22 @@ class _StepMetric extends StatelessWidget {
 class _SleepRhythmCard extends StatelessWidget {
   const _SleepRhythmCard({
     required this.analytics,
-    required this.schedule,
-    required this.syncFailed,
+    required this.target,
+    required this.targetStatus,
+    required this.sleepSyncFailed,
+    required this.targetSyncFailed,
   });
 
   final SleepAnalytics analytics;
-  final SleepScheduleSettings schedule;
-  final bool syncFailed;
+  final SamsungSleepTarget? target;
+  final SamsungHealthStatus? targetStatus;
+  final bool sleepSyncFailed;
+  final bool targetSyncFailed;
 
   @override
   Widget build(BuildContext context) {
     final today = analytics.todayActivity;
+    final hasTodaySession = analytics.sleepOn(analytics.today) != null;
     final average = analytics.sevenDayAverageDrift;
     final recorded = analytics.lastSevenRecordedDays.length;
     return SurfaceCard(
@@ -267,25 +279,36 @@ class _SleepRhythmCard extends StatelessWidget {
               const SizedBox(width: 7),
               Expanded(
                 child: Text(
-                  '${_formatClock(schedule.bedtimeStartMinutes)}–'
-                  '${_formatClock(schedule.bedtimeEndMinutes)} · wake '
-                  '${_formatClock(schedule.wakeStartMinutes)}–'
-                  '${_formatClock(schedule.wakeEndMinutes)}',
+                  target == null
+                      ? _targetMessage()
+                      : '${_formatClock(target!.bedtimeStartMinutes)}–'
+                            '${_formatClock(target!.bedtimeEndMinutes)} · wake '
+                            '${_formatClock(target!.wakeStartMinutes)}–'
+                            '${_formatClock(target!.wakeEndMinutes)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
               Text(
-                '$recorded / 7 nights',
+                '$recorded / 7 scored nights',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
           ),
-          if (syncFailed) ...[
+          if (sleepSyncFailed) ...[
             const SizedBox(height: 10),
             Text(
-              today == null
-                  ? 'Sleep timing could not refresh · retry from Today'
-                  : 'Refresh failed · showing cached sleep timing',
+              !hasTodaySession
+                  ? 'Health Connect sleep sessions could not refresh'
+                  : 'Health Connect refresh failed · showing cached sleep timing',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: MoveColors.danger),
+            ),
+          ],
+          if (targetSyncFailed) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Samsung Health sleep target could not refresh',
               style: Theme.of(
                 context,
               ).textTheme.labelSmall?.copyWith(color: MoveColors.danger),
@@ -301,6 +324,27 @@ class _SleepRhythmCard extends StatelessWidget {
       DateTime(2000, 1, 1, minutes ~/ 60, minutes % 60),
     );
   }
+
+  String _targetMessage() => switch (targetStatus) {
+    null => 'Checking Samsung Health sleep target…',
+    SamsungHealthStatus.permissionRequired =>
+      'Connect the sleep target from Today or Settings.',
+    SamsungHealthStatus.noTarget => 'No sleep target found in Samsung Health.',
+    SamsungHealthStatus.authorizationRequired =>
+      'Enable Samsung Health Developer Mode to read the target.',
+    SamsungHealthStatus.notInstalled => 'Samsung Health is not installed.',
+    SamsungHealthStatus.updateRequired => 'Samsung Health needs an update.',
+    SamsungHealthStatus.disabled => 'Samsung Health is disabled.',
+    SamsungHealthStatus.notInitialized =>
+      'Finish setting up Samsung Health first.',
+    SamsungHealthStatus.unavailable =>
+      'Samsung Health sleep target is unavailable.',
+    SamsungHealthStatus.unsupported =>
+      'Samsung Health sleep targets are unsupported.',
+    SamsungHealthStatus.error =>
+      'Samsung Health sleep target could not be refreshed.',
+    SamsungHealthStatus.connected => 'No sleep target found in Samsung Health.',
+  };
 }
 
 class _StreakCard extends StatelessWidget {
